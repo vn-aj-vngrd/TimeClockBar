@@ -10,6 +10,7 @@ Time Clock Bar is a single-target macOS SwiftUI app with AppKit integration for 
 - `Support/TimeclockDOMDetector.swift` owns the JavaScript extraction contract and DOM detection payload.
 - `Support/TimeclockReminderScheduler.swift` owns notification categories, reminder scheduling, snooze/test notifications, and legacy reminder cleanup.
 - `Support/HotkeyFormatting.swift` owns keyboard shortcut labels.
+- `Views/About/AboutView.swift` renders open-source app identity, repository link, and bundle version/build metadata.
 - `Views/Popover/PopoverView.swift` renders the popover chrome, embedded pages, page switching, fixed popover shortcuts, and settings popover entry point.
 - `Views/Popover/SettingsPopover.swift` renders settings UI and binds preferences into `TimeclockController`.
 - `Views/Popover/PreferenceRows.swift`, `HotkeyRecorderButton.swift`, `IconButton.swift`, and `PopoverStyle.swift` contain focused popover UI components and styling.

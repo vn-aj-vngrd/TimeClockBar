@@ -1,6 +1,6 @@
 # Time Clock Bar
 
-Time Clock Bar is a macOS menu-bar app for the Full Scale Time Clock web app. It embeds the time clock and daily report pages in a compact popover, shows the current status in the menu bar, and supports reminders, launch at login, a global hotkey, and fixed popover shortcuts.
+Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Clock web app. It embeds the time clock and daily report pages in a compact popover, shows the current status in the menu bar, and supports reminders, launch at login, a global hotkey, fixed popover shortcuts, and an About window with bundle version details.
 
 ## Requirements
 

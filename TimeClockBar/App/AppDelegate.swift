@@ -9,6 +9,7 @@ import WebKit
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, UNUserNotificationCenterDelegate {
     private let controller = TimeclockController()
     private let popover = NSPopover()
+    private var aboutWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private var stateCancellable: AnyCancellable?
     private var hotkeyCancellable: AnyCancellable?
@@ -88,6 +89,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
     func popoverDidClose(_ notification: Notification) {
         controller.isSettingsPresented = false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === aboutWindow {
+            aboutWindow = nil
+        }
     }
 
     private func bindStatusTitle() {
@@ -249,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
         let menu = NSMenu()
         menu.addItem(menuItem("Settings", #selector(openSettingsFromMenu), keyEquivalent: ","))
+        menu.addItem(menuItem("About Time Clock Bar", #selector(openAboutFromMenu)))
         menu.addItem(.separator())
         menu.addItem(menuItem("Open Time Clock Bar", #selector(openTimeclockInAppFromMenu), keyEquivalent: "1"))
         menu.addItem(menuItem("Open Daily Report", #selector(openDailyReportInAppFromMenu), keyEquivalent: "2"))
@@ -286,6 +294,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         controller.reload()
     }
 
+    @objc private func openAboutFromMenu() {
+        showAboutWindow()
+    }
+
     @objc private func openTimeclockInAppFromMenu() {
         showPopover(page: .timeclock)
     }
@@ -313,6 +325,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     private func showPopover(page: PopoverPage) {
         showPopover()
         controller.requestPopoverPage(page)
+    }
+
+    private func showAboutWindow() {
+        if let aboutWindow {
+            NSApp.activate(ignoringOtherApps: true)
+            aboutWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 284, height: 228),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "About Time Clock Bar"
+        window.contentViewController = NSHostingController(rootView: AboutView())
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.center()
+
+        aboutWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 
     private static func brandStatusImage() -> NSImage? {
