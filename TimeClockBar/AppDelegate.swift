@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import Network
 import SwiftUI
 import UserNotifications
 import WebKit
@@ -11,8 +12,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     private var statusItem: NSStatusItem?
     private var stateCancellable: AnyCancellable?
     private var hotkeyCancellable: AnyCancellable?
+    private var hotkeyLabelCancellable: AnyCancellable?
     private var hotkeyRef: EventHotKeyRef?
     private var hotkeyEventHandler: EventHandlerRef?
+    private let pathMonitor = NWPathMonitor()
+    private let pathMonitorQueue = DispatchQueue(label: "TimeClockBar.NetworkMonitor")
+    private var isNetworkAvailable = true
+    private var isAwake = true
+    private var sleepObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
 
     private static let hotkeySignature: OSType = 0x54434248
     private static let hotkeyID: UInt32 = 1
@@ -24,16 +32,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         configureStatusItem()
         configurePopover()
         bindStatusTitle()
+        bindStatusTooltip()
         installHotkeyHandler()
         bindHotkey()
+        startSystemMonitoring()
 
         controller.load()
-        controller.startPolling()
+        updatePolling()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         controller.stopPolling()
         unregisterHotkey()
+        pathMonitor.cancel()
+
+        if let sleepObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver)
+        }
+
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
 
         if let hotkeyEventHandler {
             RemoveEventHandler(hotkeyEventHandler)
@@ -69,6 +88,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             }
     }
 
+    private func bindStatusTooltip() {
+        hotkeyLabelCancellable = Publishers.CombineLatest(
+            controller.$hotkeyEnabled,
+            controller.$hotkeyKeyCode.combineLatest(controller.$hotkeyModifierFlags)
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] isEnabled, hotkey in
+            let label = TimeclockController.hotkeyLabel(keyCode: hotkey.0, modifiers: hotkey.1)
+            let shortcut = isEnabled ? " · \(label) toggles" : ""
+            self?.statusItem?.button?.toolTip = "Click to open\(shortcut) · Right-click for menu"
+        }
+    }
+
     private func installHotkeyHandler() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
 
@@ -102,6 +134,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         .sink { [weak self] isEnabled, keyCode, modifiers, isRecording in
             self?.registerHotkey(isEnabled: isEnabled && !isRecording, keyCode: keyCode, modifiers: modifiers)
         }
+    }
+
+    private func startSystemMonitoring() {
+        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.isAwake = false
+            self?.updatePolling()
+        }
+
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.isAwake = true
+            self?.updatePolling()
+        }
+
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                guard let self else { return }
+
+                self.isNetworkAvailable = path.status == .satisfied
+                self.updatePolling()
+            }
+        }
+        pathMonitor.start(queue: pathMonitorQueue)
+    }
+
+    private func updatePolling() {
+        guard isAwake && isNetworkAvailable else {
+            controller.stopPolling()
+            return
+        }
+
+        controller.reload()
+        controller.startPolling()
     }
 
     private func registerHotkey(isEnabled: Bool, keyCode: UInt32, modifiers: NSEvent.ModifierFlags) {
@@ -207,11 +279,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         case TimeclockController.openTimeclockNotificationActionIdentifier,
             UNNotificationDefaultActionIdentifier:
             showPopover()
+        case TimeclockController.snooze5NotificationActionIdentifier:
+            snooze(response, minutes: 5)
+        case TimeclockController.snooze10NotificationActionIdentifier:
+            snooze(response, minutes: 10)
+        case TimeclockController.snooze15NotificationActionIdentifier:
+            snooze(response, minutes: 15)
         default:
             break
         }
 
         completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    private func snooze(_ response: UNNotificationResponse, minutes: Int) {
+        let content = response.notification.request.content
+        controller.snoozeNotification(
+            title: content.title,
+            body: content.body,
+            categoryIdentifier: content.categoryIdentifier,
+            minutes: minutes
+        )
     }
 
     private static func carbonModifiers(from modifiers: NSEvent.ModifierFlags) -> UInt32 {

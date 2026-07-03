@@ -61,19 +61,19 @@ enum TimeclockState: Equatable {
     var menuBarTitle: String {
         switch self {
         case .loading:
-            return "↻ Loading"
+            return "Loading"
         case .loginRequired:
-            return "⚠ Login"
+            return "Login"
         case .stale:
-            return "⚠ Stale"
+            return "Stale"
         case .clockedOut:
-            return "○ Out"
+            return "Out"
         case .active(let time):
-            return time.isEmpty ? "⏱ Active" : "⏱ \(time)"
+            return time.isEmpty ? "Active" : "Active \(time)"
         case .onBreak(let time):
-            return time.isEmpty ? "☕ Break" : "☕ \(time)"
+            return time.isEmpty ? "Break" : "Break \(time)"
         case .unknown:
-            return "?"
+            return "Unknown"
         }
     }
 

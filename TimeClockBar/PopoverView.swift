@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import WebKit
 
 struct PopoverView: View {
@@ -26,7 +27,7 @@ struct PopoverView: View {
     private var header: some View {
         HStack(spacing: 10) {
             HStack(spacing: 2) {
-                IconButton("Settings", systemImage: "gearshape") {
+                IconButton(settingsTooltip, systemImage: "gearshape") {
                     controller.isSettingsPresented.toggle()
                 }
                 .popover(isPresented: $controller.isSettingsPresented, arrowEdge: .top) {
@@ -101,6 +102,10 @@ struct PopoverView: View {
         case .dailyReport:
             return controller.dailyReportWebView
         }
+    }
+
+    private var settingsTooltip: String {
+        controller.hotkeyEnabled ? "Settings · \(controller.hotkeyLabel) toggles app" : "Settings"
     }
 
     private var currentURL: URL {
@@ -184,6 +189,13 @@ struct PopoverView: View {
         )
     }
 
+    private var clockOutReminderLeadBinding: Binding<Int> {
+        minutesBinding(
+            get: { controller.clockOutReminderLeadMinutes },
+            set: { controller.setClockOutReminderLeadMinutes($0) }
+        )
+    }
+
     private var displayLabelsBinding: Binding<Bool> {
         Binding(
             get: { controller.displayLabelsEnabled },
@@ -241,18 +253,26 @@ struct PopoverView: View {
             }
 
             PreferenceSection("Notifications") {
+                PreferenceRow("Permission") {
+                    HStack(spacing: 8) {
+                        Text(notificationPermissionLabel)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(notificationPermissionEnabled ? ChromeColor.secondaryText : ChromeColor.primaryText)
+
+                        if !notificationPermissionEnabled {
+                            Button("Open") {
+                                openNotificationSettings()
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+
                 PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
 
                 if controller.workReminderEnabled {
                     PreferenceRow("Before shift time") {
-                        Picker("Before shift time", selection: workReminderLeadBinding) {
-                            Text("15 min").tag(15)
-                            Text("10 min").tag(10)
-                            Text("5 min").tag(5)
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 178)
+                        leadTimePicker(selection: workReminderLeadBinding)
                     }
                 }
 
@@ -263,6 +283,19 @@ struct PopoverView: View {
                 }
 
                 PreferenceToggleRow("Clock out reminder", isOn: clockOutReminderEnabledBinding)
+
+                if controller.clockOutReminderEnabled {
+                    PreferenceRow("Before clock out") {
+                        leadTimePicker(selection: clockOutReminderLeadBinding)
+                    }
+                }
+
+                PreferenceRow("Test") {
+                    Button("Send") {
+                        controller.sendTestNotification()
+                    }
+                    .controlSize(.small)
+                }
             }
 
             PreferenceSection("App") {
@@ -315,8 +348,43 @@ struct PopoverView: View {
         }
         .padding(16)
         .frame(width: 420)
+        .onAppear {
+            controller.refreshNotificationAuthorizationStatus()
+        }
         .onDisappear {
             setHotkeyRecording(false)
+        }
+    }
+
+    private var notificationPermissionEnabled: Bool {
+        switch controller.notificationAuthorizationStatus {
+        case .authorized, .provisional:
+            return true
+        case .denied, .notDetermined:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private var notificationPermissionLabel: String {
+        switch controller.notificationAuthorizationStatus {
+        case .authorized:
+            return "Allowed"
+        case .provisional:
+            return "Allowed quietly"
+        case .denied:
+            return "Disabled"
+        case .notDetermined:
+            return "Not set"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    private func openNotificationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -332,6 +400,17 @@ struct PopoverView: View {
             get: { get() },
             set: { set($0) }
         )
+    }
+
+    private func leadTimePicker(selection: Binding<Int>) -> some View {
+        Picker("", selection: selection) {
+            Text("15 min").tag(15)
+            Text("10 min").tag(10)
+            Text("5 min").tag(5)
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 178)
     }
 
     private func setHotkeyRecording(_ isRecording: Bool) {

@@ -25,11 +25,13 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var breakReminderEnabled: Bool
     @Published private(set) var breakReminderMinutes: Int
     @Published private(set) var clockOutReminderEnabled: Bool
+    @Published private(set) var clockOutReminderLeadMinutes: Int
     @Published private(set) var workingWeekdays: Set<Int>
     @Published private(set) var hotkeyEnabled: Bool
     @Published private(set) var hotkeyKeyCode: UInt32
     @Published private(set) var hotkeyModifierFlags: NSEvent.ModifierFlags
     @Published private(set) var isRecordingHotkey = false
+    @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published var isSettingsPresented = false
 
     private var pollTimer: Timer?
@@ -50,6 +52,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let breakReminderEnabledDefaultsKey = "breakReminderEnabled"
     private static let breakReminderMinutesDefaultsKey = "breakReminderMinutes"
     private static let clockOutReminderEnabledDefaultsKey = "clockOutReminderEnabled"
+    private static let clockOutReminderLeadMinutesDefaultsKey = "clockOutReminderLeadMinutes"
     private static let workingWeekdaysDefaultsKey = "workingWeekdays"
     private static let hotkeyEnabledDefaultsKey = "hotkeyEnabled"
     private static let hotkeyKeyCodeDefaultsKey = "hotkeyKeyCode"
@@ -60,6 +63,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let loginRequiredNotificationIdentifier = "login-required"
     static let openTimeclockNotificationActionIdentifier = "open-timeclock"
     static let openDailyReportNotificationActionIdentifier = "open-daily-report"
+    static let snooze5NotificationActionIdentifier = "snooze-5"
+    static let snooze10NotificationActionIdentifier = "snooze-10"
+    static let snooze15NotificationActionIdentifier = "snooze-15"
     static let loginRequiredCategoryIdentifier = "login-required-actions"
     static let reminderCategoryIdentifier = "timeclock-reminder-actions"
     static let reportReminderCategoryIdentifier = "timeclock-report-reminder-actions"
@@ -93,6 +99,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         breakReminderEnabled = Self.savedBool(Self.breakReminderEnabledDefaultsKey, defaultValue: false)
         breakReminderMinutes = Self.savedMinutes(Self.breakReminderMinutesDefaultsKey, defaultValue: 19 * 60)
         clockOutReminderEnabled = Self.savedBool(Self.clockOutReminderEnabledDefaultsKey, defaultValue: true)
+        clockOutReminderLeadMinutes = Self.savedMinutes(Self.clockOutReminderLeadMinutesDefaultsKey, defaultValue: 15)
         workingWeekdays = Self.savedWorkingWeekdays()
         hotkeyEnabled = Self.savedBool(Self.hotkeyEnabledDefaultsKey, defaultValue: true)
         hotkeyKeyCode = UInt32(UserDefaults.standard.object(forKey: Self.hotkeyKeyCodeDefaultsKey) as? Int ?? Int(Self.defaultHotkeyKeyCode))
@@ -103,6 +110,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         webView.navigationDelegate = self
         Self.registerNotificationCategories()
         Self.removeLegacyReportReminders()
+        refreshNotificationAuthorizationStatus()
         scheduleReminders()
     }
 
@@ -210,6 +218,31 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         scheduleReminders()
     }
 
+    func setClockOutReminderLeadMinutes(_ minutes: Int) {
+        clockOutReminderLeadMinutes = minutes
+        UserDefaults.standard.set(minutes, forKey: Self.clockOutReminderLeadMinutesDefaultsKey)
+        scheduleReminders()
+    }
+
+    func sendTestNotification() {
+        Self.sendNotification(
+            identifier: "test-reminder-\(UUID().uuidString)",
+            title: "Test reminder",
+            body: "Notifications are working. Try snooze from the notification actions.",
+            categoryIdentifier: Self.reminderCategoryIdentifier
+        )
+    }
+
+    func snoozeNotification(title: String, body: String, categoryIdentifier: String, minutes: Int) {
+        Self.sendNotification(
+            identifier: "snooze-\(UUID().uuidString)",
+            title: title,
+            body: body,
+            categoryIdentifier: categoryIdentifier,
+            delaySeconds: TimeInterval(minutes * 60)
+        )
+    }
+
     func setWorkingWeekday(_ weekday: Int, isEnabled: Bool) {
         var next = workingWeekdays
 
@@ -298,6 +331,14 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UserDefaults.standard.set(Int(hotkeyModifierFlags.rawValue), forKey: Self.hotkeyModifiersDefaultsKey)
     }
 
+    func refreshNotificationAuthorizationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                self?.notificationAuthorizationStatus = settings.authorizationStatus
+            }
+        }
+    }
+
     func startPolling() {
         stopPolling()
 
@@ -329,6 +370,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             self.lastDetection = detection
             let nextTimers = Self.timers(from: detection)
             let nextState = self.parseState(from: detection)
+            let previousState = self.state
             self.timers = nextTimers
             self.updateTodayProgressTitle()
             self.handleLoginNotification(for: nextState)
@@ -338,6 +380,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             }
             self.state = resolvedState
             self.updateMenuBarTitle()
+            if previousState != resolvedState {
+                self.scheduleReminders()
+            }
         }
     }
 
@@ -443,6 +488,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func scheduleReminders() {
+        let currentState = state
         let identifiers =
             [
             Self.workReminderIdentifier,
@@ -462,7 +508,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             guard isAllowed, let self else { return }
 
             for weekday in self.workingWeekdays {
-                if self.workReminderEnabled {
+                if self.workReminderEnabled && !Self.isWorking(state: currentState) {
                     let reminderMinutes = self.workStartMinutes - self.workReminderLeadMinutes
 
                     Self.scheduleWeeklyNotification(
@@ -475,7 +521,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                     )
                 }
 
-                if self.breakReminderEnabled {
+                if self.breakReminderEnabled && !Self.isOnBreak(state: currentState) {
                     Self.scheduleWeeklyNotification(
                         identifier: Self.notificationIdentifier(prefix: Self.breakReminderIdentifier, weekday: weekday),
                         title: "Break reminder",
@@ -486,14 +532,18 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                     )
                 }
 
-                if self.clockOutReminderEnabled {
-                    let endWeekday = self.workEndMinutes <= self.workStartMinutes ? Self.shiftedWeekday(weekday, byDays: 1) : weekday
+                if self.clockOutReminderEnabled && !Self.isClockedOut(state: currentState) {
+                    let reminderMinutes = self.workEndMinutes - self.clockOutReminderLeadMinutes
+                    let endWeekday = Self.shiftedWeekday(
+                        weekday,
+                        byDays: (self.workEndMinutes <= self.workStartMinutes ? 1 : 0) + Self.dayOffset(forMinutes: reminderMinutes)
+                    )
 
                     Self.scheduleWeeklyNotification(
                         identifier: Self.notificationIdentifier(prefix: Self.clockOutReminderIdentifier, weekday: weekday),
                         title: "Clock out reminder",
-                        body: "Your shift is ending. Submit your report before clocking out.",
-                        minutes: self.workEndMinutes,
+                        body: "Your shift ends in \(self.clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
+                        minutes: reminderMinutes,
                         weekday: endWeekday,
                         categoryIdentifier: Self.reportReminderCategoryIdentifier
                     )
@@ -658,7 +708,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
         guard !parts.isEmpty else { return state.menuBarTitle }
 
-        return "⏱ " + parts.joined(separator: " · ")
+        return parts.joined(separator: " · ")
     }
 
     private static func specificTimerValue(for component: TimeclockDisplayComponent, timers: TimeclockTimers) -> String {
@@ -709,6 +759,33 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return timers.current.isEmpty ? timers.fallback : timers.current
         case .loading, .loginRequired, .stale, .clockedOut, .unknown:
             return ""
+        }
+    }
+
+    private static func isWorking(state: TimeclockState) -> Bool {
+        switch state {
+        case .active, .onBreak:
+            return true
+        case .loading, .loginRequired, .stale, .clockedOut, .unknown:
+            return false
+        }
+    }
+
+    private static func isOnBreak(state: TimeclockState) -> Bool {
+        switch state {
+        case .onBreak:
+            return true
+        case .loading, .loginRequired, .stale, .clockedOut, .active, .unknown:
+            return false
+        }
+    }
+
+    private static func isClockedOut(state: TimeclockState) -> Bool {
+        switch state {
+        case .clockedOut:
+            return true
+        case .loading, .loginRequired, .stale, .active, .onBreak, .unknown:
+            return false
         }
     }
 
@@ -771,6 +848,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             title: "Open Report",
             options: [.foreground]
         )
+        let snooze5 = UNNotificationAction(identifier: snooze5NotificationActionIdentifier, title: "Snooze 5 min", options: [])
+        let snooze10 = UNNotificationAction(identifier: snooze10NotificationActionIdentifier, title: "Snooze 10 min", options: [])
+        let snooze15 = UNNotificationAction(identifier: snooze15NotificationActionIdentifier, title: "Snooze 15 min", options: [])
 
         UNUserNotificationCenter.current().setNotificationCategories([
             UNNotificationCategory(
@@ -780,18 +860,18 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             ),
             UNNotificationCategory(
                 identifier: reminderCategoryIdentifier,
-                actions: [openTimeclock],
+                actions: [openTimeclock, snooze5, snooze10, snooze15],
                 intentIdentifiers: []
             ),
             UNNotificationCategory(
                 identifier: reportReminderCategoryIdentifier,
-                actions: [openReport, openTimeclock],
+                actions: [openReport, openTimeclock, snooze5, snooze10, snooze15],
                 intentIdentifiers: []
             )
         ])
     }
 
-    private static func sendNotification(identifier: String, title: String, body: String, categoryIdentifier: String) {
+    private static func sendNotification(identifier: String, title: String, body: String, categoryIdentifier: String, delaySeconds: TimeInterval? = nil) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, _ in
             guard isAllowed else { return }
 
@@ -801,7 +881,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             content.sound = .default
             content.categoryIdentifier = categoryIdentifier
 
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            let trigger = delaySeconds.map { UNTimeIntervalNotificationTrigger(timeInterval: $0, repeats: false) }
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(request)
         }
     }
