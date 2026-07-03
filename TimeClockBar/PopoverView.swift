@@ -290,12 +290,14 @@ struct PopoverView: View {
                     }
                 }
 
-                PreferenceRow("Test") {
-                    Button("Send") {
-                        controller.sendTestNotification()
+                #if DEBUG
+                    PreferenceRow("Test") {
+                        Button("Send") {
+                            controller.sendTestNotification()
+                        }
+                        .controlSize(.small)
                     }
-                    .controlSize(.small)
-                }
+                #endif
             }
 
             PreferenceSection("App") {
