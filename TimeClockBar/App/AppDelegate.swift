@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         )
         .receive(on: RunLoop.main)
         .sink { [weak self] isEnabled, hotkey in
-            let label = TimeclockController.hotkeyLabel(keyCode: hotkey.0, modifiers: hotkey.1)
+            let label = HotkeyFormatting.label(keyCode: hotkey.0, modifiers: hotkey.1)
             let shortcut = isEnabled ? " · \(label) toggles" : ""
             self?.statusItem?.button?.toolTip = "Click to open\(shortcut) · Right-click for menu"
         }
@@ -308,16 +308,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         switch response.actionIdentifier {
-        case TimeclockController.openDailyReportNotificationActionIdentifier:
+        case TimeclockReminderScheduler.openDailyReportActionIdentifier:
             openBrowser(url: controller.dailyReportURL)
-        case TimeclockController.openTimeclockNotificationActionIdentifier,
+        case TimeclockReminderScheduler.openTimeclockActionIdentifier,
             UNNotificationDefaultActionIdentifier:
             showPopover()
-        case TimeclockController.snooze5NotificationActionIdentifier:
+        case TimeclockReminderScheduler.snooze5ActionIdentifier:
             snooze(response, minutes: 5)
-        case TimeclockController.snooze10NotificationActionIdentifier:
+        case TimeclockReminderScheduler.snooze10ActionIdentifier:
             snooze(response, minutes: 10)
-        case TimeclockController.snooze15NotificationActionIdentifier:
+        case TimeclockReminderScheduler.snooze15ActionIdentifier:
             snooze(response, minutes: 15)
         default:
             break

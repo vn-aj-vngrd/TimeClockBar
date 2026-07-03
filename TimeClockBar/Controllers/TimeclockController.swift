@@ -1,5 +1,5 @@
-import Combine
 import AppKit
+import Combine
 import Foundation
 import ServiceManagement
 import UserNotifications
@@ -36,7 +36,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published var isSettingsPresented = false
 
     private var pollTimer: Timer?
-    private var lastDetection: TimeclockDetection?
+    private var lastDetection: TimeclockDOMDetection?
     private var timers = TimeclockTimers.empty
     private var lastRunningTimerValue = ""
     private var lastRunningTimerChangedAt = Date()
@@ -59,18 +59,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let hotkeyEnabledDefaultsKey = "hotkeyEnabled"
     private static let hotkeyKeyCodeDefaultsKey = "hotkeyKeyCode"
     private static let hotkeyModifiersDefaultsKey = "hotkeyModifiers"
-    private static let workReminderIdentifier = "work-start-reminder"
-    private static let breakReminderIdentifier = "break-reminder"
-    private static let clockOutReminderIdentifier = "clock-out-reminder"
-    private static let loginRequiredNotificationIdentifier = "login-required"
-    static let openTimeclockNotificationActionIdentifier = "open-timeclock"
-    static let openDailyReportNotificationActionIdentifier = "open-daily-report"
-    static let snooze5NotificationActionIdentifier = "snooze-5"
-    static let snooze10NotificationActionIdentifier = "snooze-10"
-    static let snooze15NotificationActionIdentifier = "snooze-15"
-    static let loginRequiredCategoryIdentifier = "login-required-actions"
-    static let reminderCategoryIdentifier = "timeclock-reminder-actions"
-    static let reportReminderCategoryIdentifier = "timeclock-report-reminder-actions"
     private static let weekdays = Array(1...7)
     private static let defaultWorkingWeekdays: Set<Int> = [2, 3, 4, 5, 6]
     private static let defaultHotkeyKeyCode: UInt32 = 17
@@ -79,7 +67,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let staleTimerSeconds: TimeInterval = 120
 
     var hotkeyLabel: String {
-        Self.hotkeyLabel(keyCode: hotkeyKeyCode, modifiers: hotkeyModifierFlags)
+        HotkeyFormatting.label(keyCode: hotkeyKeyCode, modifiers: hotkeyModifierFlags)
     }
 
     var isDefaultHotkey: Bool {
@@ -111,8 +99,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         super.init()
 
         webView.navigationDelegate = self
-        Self.registerNotificationCategories()
-        Self.removeLegacyReportReminders()
+        TimeclockReminderScheduler.registerNotificationCategories()
+        TimeclockReminderScheduler.removeLegacyReportReminders()
         refreshNotificationAuthorizationStatus()
         scheduleReminders()
     }
@@ -228,7 +216,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func snoozeNotification(title: String, body: String, categoryIdentifier: String, minutes: Int) {
-        Self.sendNotification(
+        TimeclockReminderScheduler.sendNotification(
             identifier: "snooze-\(UUID().uuidString)",
             title: title,
             body: body,
@@ -238,29 +226,29 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func sendTestShiftReminder() {
-        Self.sendNotification(
+        TimeclockReminderScheduler.sendNotification(
             identifier: "test-shift-reminder-\(UUID().uuidString)",
             title: "Shift starts soon",
             body: "Your work shift starts in \(workReminderLeadMinutes) minutes.",
-            categoryIdentifier: Self.reminderCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
         )
     }
 
     func sendTestBreakReminder() {
-        Self.sendNotification(
+        TimeclockReminderScheduler.sendNotification(
             identifier: "test-break-reminder-\(UUID().uuidString)",
             title: "Break reminder",
             body: "Time for your preferred break.",
-            categoryIdentifier: Self.reminderCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
         )
     }
 
     func sendTestClockOutReminder() {
-        Self.sendNotification(
+        TimeclockReminderScheduler.sendNotification(
             identifier: "test-clock-out-reminder-\(UUID().uuidString)",
             title: "Clock out reminder",
             body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
-            categoryIdentifier: Self.reportReminderCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
         )
     }
 
@@ -428,7 +416,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func readTimeclockState() {
-        webView.evaluateJavaScript(Self.stateDetectionScript) { [weak self] result, error in
+        webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript) { [weak self] result, error in
             guard let self else { return }
 
             if error != nil {
@@ -439,9 +427,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 return
             }
 
-            let detection = TimeclockDetection(result as? [String: Any])
+            let detection = TimeclockDOMDetection(result as? [String: Any])
             self.lastDetection = detection
-            let nextTimers = Self.timers(from: detection)
+            let nextTimers = TimeclockDOMDetector.timers(from: detection)
             let nextState = self.parseState(from: detection)
             let previousState = self.state
             self.timers = nextTimers
@@ -463,7 +451,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         readTimeclockState()
     }
 
-    private func parseState(from detection: TimeclockDetection?) -> TimeclockState {
+    private func parseState(from detection: TimeclockDOMDetection?) -> TimeclockState {
         guard let detection else {
             return .unknown(nil)
         }
@@ -552,112 +540,27 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         guard !hasSentLoginNotification else { return }
 
         hasSentLoginNotification = true
-        Self.sendNotification(
-            identifier: Self.loginRequiredNotificationIdentifier,
+        TimeclockReminderScheduler.sendNotification(
+            identifier: TimeclockReminderScheduler.loginRequiredNotificationIdentifier,
             title: "TimeClock Bar login expired",
             body: "Open TimeClock Bar to sign in again.",
-            categoryIdentifier: Self.loginRequiredCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.loginRequiredCategoryIdentifier
         )
     }
 
     private func scheduleReminders() {
-        let currentState = state
-        let identifiers =
-            [
-            Self.workReminderIdentifier,
-            Self.breakReminderIdentifier,
-            Self.clockOutReminderIdentifier
-            ] +
-            Self.notificationIdentifiers(prefix: Self.workReminderIdentifier) +
-            Self.notificationIdentifiers(prefix: Self.breakReminderIdentifier) +
-            Self.notificationIdentifiers(prefix: Self.clockOutReminderIdentifier)
-
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
-
-        guard !workingWeekdays.isEmpty,
-              workReminderEnabled || breakReminderEnabled || clockOutReminderEnabled else { return }
-
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] isAllowed, _ in
-            guard isAllowed, let self else { return }
-
-            for weekday in self.workingWeekdays {
-                if self.workReminderEnabled && !Self.isWorking(state: currentState) {
-                    let reminderMinutes = self.workStartMinutes - self.workReminderLeadMinutes
-
-                    Self.scheduleWeeklyNotification(
-                        identifier: Self.notificationIdentifier(prefix: Self.workReminderIdentifier, weekday: weekday),
-                        title: "Shift starts soon",
-                        body: "Your work shift starts in \(self.workReminderLeadMinutes) minutes.",
-                        minutes: reminderMinutes,
-                        weekday: Self.shiftedWeekday(weekday, byDays: Self.dayOffset(forMinutes: reminderMinutes)),
-                        categoryIdentifier: Self.reminderCategoryIdentifier
-                    )
-                }
-
-                if self.breakReminderEnabled && !Self.isOnBreak(state: currentState) {
-                    Self.scheduleWeeklyNotification(
-                        identifier: Self.notificationIdentifier(prefix: Self.breakReminderIdentifier, weekday: weekday),
-                        title: "Break reminder",
-                        body: "Time for your preferred break.",
-                        minutes: self.breakReminderMinutes,
-                        weekday: weekday,
-                        categoryIdentifier: Self.reminderCategoryIdentifier
-                    )
-                }
-
-                if self.clockOutReminderEnabled && !Self.isClockedOut(state: currentState) {
-                    let reminderMinutes = self.workEndMinutes - self.clockOutReminderLeadMinutes
-                    let endWeekday = Self.shiftedWeekday(
-                        weekday,
-                        byDays: (self.workEndMinutes <= self.workStartMinutes ? 1 : 0) + Self.dayOffset(forMinutes: reminderMinutes)
-                    )
-
-                    Self.scheduleWeeklyNotification(
-                        identifier: Self.notificationIdentifier(prefix: Self.clockOutReminderIdentifier, weekday: weekday),
-                        title: "Clock out reminder",
-                        body: "Your shift ends in \(self.clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
-                        minutes: reminderMinutes,
-                        weekday: endWeekday,
-                        categoryIdentifier: Self.reportReminderCategoryIdentifier
-                    )
-                }
-            }
-        }
-    }
-
-    private static func scheduleWeeklyNotification(identifier: String, title: String, body: String, minutes: Int, weekday: Int, categoryIdentifier: String) {
-        let normalized = normalizedMinutes(minutes)
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        content.categoryIdentifier = categoryIdentifier
-
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: DateComponents(hour: normalized / 60, minute: normalized % 60, weekday: weekday),
-            repeats: true
+        TimeclockReminderScheduler.schedule(
+            state: state,
+            workingWeekdays: workingWeekdays,
+            workReminderEnabled: workReminderEnabled,
+            workStartMinutes: workStartMinutes,
+            workReminderLeadMinutes: workReminderLeadMinutes,
+            breakReminderEnabled: breakReminderEnabled,
+            breakReminderMinutes: breakReminderMinutes,
+            clockOutReminderEnabled: clockOutReminderEnabled,
+            workEndMinutes: workEndMinutes,
+            clockOutReminderLeadMinutes: clockOutReminderLeadMinutes
         )
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
-    }
-
-    private static func notificationIdentifiers(prefix: String) -> [String] {
-        weekdays.map { notificationIdentifier(prefix: prefix, weekday: $0) }
-    }
-
-    private static func notificationIdentifier(prefix: String, weekday: Int) -> String {
-        "\(prefix)-\(weekday)"
-    }
-
-    private static func removeLegacyReportReminders() {
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            let identifiers = requests
-                .map(\.identifier)
-                .filter { $0.hasPrefix("daily-report-") }
-
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
-            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
-        }
     }
 
     private static func savedBool(_ key: String, defaultValue: Bool) -> Bool {
@@ -690,36 +593,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         return modifiers.isEmpty ? defaultHotkeyModifiers : modifiers
     }
 
-    static func hotkeyLabel(keyCode: UInt32, modifiers: NSEvent.ModifierFlags) -> String {
-        "\(modifierLabel(modifiers))\(keyLabel(keyCode))"
-    }
-
-    static func hotkeyModifierLabel(_ modifiers: NSEvent.ModifierFlags) -> String {
-        modifierLabel(modifiers)
-    }
-
-    private static func modifierLabel(_ modifiers: NSEvent.ModifierFlags) -> String {
-        [
-            modifiers.contains(.control) ? "⌃" : "",
-            modifiers.contains(.option) ? "⌥" : "",
-            modifiers.contains(.shift) ? "⇧" : "",
-            modifiers.contains(.command) ? "⌘" : ""
-        ].joined()
-    }
-
-    private static func keyLabel(_ keyCode: UInt32) -> String {
-        let labels: [UInt32: String] = [
-            0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
-            11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T", 18: "1", 19: "2",
-            20: "3", 21: "4", 22: "6", 23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8",
-            29: "0", 30: "]", 31: "O", 32: "U", 33: "[", 34: "I", 35: "P", 37: "L", 38: "J",
-            39: "'", 40: "K", 41: ";", 42: "\\", 43: ",", 44: "/", 45: "N", 46: "M", 47: ".",
-            49: "Space", 51: "Delete", 53: "Esc", 76: "Enter", 123: "←", 124: "→", 125: "↓", 126: "↑"
-        ]
-
-        return labels[keyCode] ?? "Key \(keyCode)"
-    }
-
     private static func savedDisplayComponents() -> Set<TimeclockDisplayComponent> {
         if let values = UserDefaults.standard.array(forKey: displayComponentsDefaultsKey) as? [String] {
             let components = Set(values.compactMap(TimeclockDisplayComponent.init(rawValue:)))
@@ -738,17 +611,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         TimeclockDisplayComponent.allCases
             .filter { components.contains($0) }
             .map(\.rawValue)
-    }
-
-    private static func timers(from detection: TimeclockDetection?) -> TimeclockTimers {
-        guard let detection else { return .empty }
-
-        return TimeclockTimers(
-            current: detection.currentTimer,
-            day: detection.dayTimer,
-            week: detection.weekTimer,
-            fallback: detection.timer
-        )
     }
 
     private static func menuBarTitle(
@@ -835,33 +697,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         }
     }
 
-    private static func isWorking(state: TimeclockState) -> Bool {
-        switch state {
-        case .active, .onBreak:
-            return true
-        case .loading, .loginRequired, .stale, .clockedOut, .unknown:
-            return false
-        }
-    }
-
-    private static func isOnBreak(state: TimeclockState) -> Bool {
-        switch state {
-        case .onBreak:
-            return true
-        case .loading, .loginRequired, .stale, .clockedOut, .active, .unknown:
-            return false
-        }
-    }
-
-    private static func isClockedOut(state: TimeclockState) -> Bool {
-        switch state {
-        case .clockedOut:
-            return true
-        case .loading, .loginRequired, .stale, .active, .onBreak, .unknown:
-            return false
-        }
-    }
-
     private static func timerMinutes(from value: String) -> Int? {
         let parts = value.replacingOccurrences(of: ".", with: ":").split(separator: ":").compactMap { Int($0) }
         guard parts.count >= 2 else { return nil }
@@ -888,228 +723,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         return "\(hours)h \(minutes)m"
     }
 
-    private static func dayOffset(forMinutes minutes: Int) -> Int {
-        if minutes < 0 {
-            return -1
-        }
-
-        if minutes >= 1440 {
-            return 1
-        }
-
-        return 0
-    }
-
-    private static func shiftedWeekday(_ weekday: Int, byDays offset: Int) -> Int {
-        ((weekday - 1 + offset + 7) % 7) + 1
-    }
-
     private static func makeConfiguration() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         return configuration
     }
-
-    static func registerNotificationCategories() {
-        let openTimeclock = UNNotificationAction(
-            identifier: openTimeclockNotificationActionIdentifier,
-            title: "Open TimeClock Bar",
-            options: [.foreground]
-        )
-        let openReport = UNNotificationAction(
-            identifier: openDailyReportNotificationActionIdentifier,
-            title: "Open Report",
-            options: [.foreground]
-        )
-        let snooze5 = UNNotificationAction(identifier: snooze5NotificationActionIdentifier, title: "Snooze 5 min", options: [])
-        let snooze10 = UNNotificationAction(identifier: snooze10NotificationActionIdentifier, title: "Snooze 10 min", options: [])
-        let snooze15 = UNNotificationAction(identifier: snooze15NotificationActionIdentifier, title: "Snooze 15 min", options: [])
-
-        UNUserNotificationCenter.current().setNotificationCategories([
-            UNNotificationCategory(
-                identifier: loginRequiredCategoryIdentifier,
-                actions: [openTimeclock],
-                intentIdentifiers: []
-            ),
-            UNNotificationCategory(
-                identifier: reminderCategoryIdentifier,
-                actions: [openTimeclock, snooze5, snooze10, snooze15],
-                intentIdentifiers: []
-            ),
-            UNNotificationCategory(
-                identifier: reportReminderCategoryIdentifier,
-                actions: [openReport, openTimeclock, snooze5, snooze10, snooze15],
-                intentIdentifiers: []
-            )
-        ])
-    }
-
-    private static func sendNotification(identifier: String, title: String, body: String, categoryIdentifier: String, delaySeconds: TimeInterval? = nil) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, _ in
-            guard isAllowed else { return }
-
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            content.sound = .default
-            content.categoryIdentifier = categoryIdentifier
-
-            let trigger = delaySeconds.map { UNTimeIntervalNotificationTrigger(timeInterval: $0, repeats: false) }
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request)
-        }
-    }
-
-    private struct TimeclockDetection {
-        let state: String
-        let timer: String
-        let currentTimer: String
-        let dayTimer: String
-        let weekTimer: String
-
-        init?(_ dictionary: [String: Any]?) {
-            guard let dictionary else { return nil }
-
-            state = dictionary["state"] as? String ?? "unknown"
-            timer = dictionary["timer"] as? String ?? ""
-            currentTimer = dictionary["currentTimer"] as? String ?? ""
-            dayTimer = dictionary["dayTimer"] as? String ?? ""
-            weekTimer = dictionary["weekTimer"] as? String ?? ""
-        }
-    }
-
-    // DOM detection is intentionally text-based so selectors can be tuned after inspecting the live page.
-    private static let stateDetectionScript = """
-    (() => {
-      const normalize = (value) =>
-        (value || "").replace(/\\s+/g, " ").trim();
-
-      const bodyText = normalize(document.body?.innerText || "");
-      const lower = bodyText.toLowerCase();
-
-      const timePattern = /\\b\\d{1,2}:\\d{2}(?:(?::|\\.)\\d{1,2})?\\b/;
-      const cleanTimer = (value) => {
-        const match = normalize(value).match(timePattern);
-        return match ? match[0] : "";
-      };
-      const metricTime = (label) => {
-        const match = bodyText.match(new RegExp("\\\\b" + label + "\\\\s+(\\\\d{1,2}:\\\\d{2}(?:(?::|\\\\.)\\\\d{1,2})?)", "i"));
-        return match ? match[1] : "";
-      };
-
-      const timerSelectors = [
-        '[data-testid="timer"]',
-        '[data-testid*="timer"]',
-        '[data-testid*="elapsed"]',
-        '[data-testid*="duration"]',
-        '[class*="timer"]',
-        '[class*="duration"]',
-        '[class*="elapsed"]',
-        '[id*="timer"]'
-      ];
-
-      const findSidebarTimer = () => {
-        const elements = Array.from(document.querySelectorAll("body *"));
-
-        for (const element of elements) {
-          const text = normalize(element.innerText || element.textContent || "");
-          const timer = cleanTimer(text);
-
-          if (!timer || text !== timer) {
-            continue;
-          }
-
-          let parent = element.parentElement;
-
-          for (let depth = 0; parent && depth < 5; depth += 1) {
-            const parentText = normalize(parent.innerText || parent.textContent || "").toLowerCase();
-
-            if (parentText.includes("time clock")) {
-              return timer;
-            }
-
-            parent = parent.parentElement;
-          }
-        }
-
-        return "";
-      };
-
-      const currentTimer = metricTime("Current");
-      const dayTimer = metricTime("Day");
-      const weekTimer = metricTime("Week");
-      let timer = currentTimer || dayTimer || weekTimer;
-
-      for (const selector of timerSelectors) {
-        if (timer) {
-          break;
-        }
-
-        const el = document.querySelector(selector);
-        const text = cleanTimer(el?.innerText || el?.textContent || "");
-        if (text) {
-          timer = text;
-          break;
-        }
-      }
-
-      if (!timer) {
-        timer = findSidebarTimer();
-      }
-
-      if (!timer) {
-        const match = bodyText.match(timePattern);
-        timer = match ? match[0] : "";
-      }
-
-      const hasLogin =
-        lower.includes("login") ||
-        lower.includes("log in") ||
-        lower.includes("sign in");
-
-      const hasClockIn = lower.includes("clock in");
-      const hasClockOut = lower.includes("clock out");
-
-      const hasStartBreak =
-        lower.includes("start break") ||
-        lower.includes("take break");
-
-      const hasEndBreak =
-        lower.includes("end break") ||
-        lower.includes("resume") ||
-        lower.includes("back from break");
-
-      const hasOnBreak =
-        lower.includes("on break") ||
-        lower.includes("currently on break");
-
-      const hasSidebarTimer =
-        Boolean(timer) &&
-        lower.includes("time clock") &&
-        !hasClockIn;
-
-      let state = "unknown";
-
-      if (hasLogin) {
-        state = "loginRequired";
-      } else if (hasEndBreak || hasOnBreak) {
-        state = "onBreak";
-      } else if (hasClockOut || hasStartBreak) {
-        state = "active";
-      } else if (hasSidebarTimer) {
-        state = "active";
-      } else if (hasClockIn) {
-        state = "clockedOut";
-      }
-
-      return {
-        state,
-        timer,
-        currentTimer,
-        dayTimer,
-        weekTimer,
-        bodyPreview: bodyText.slice(0, 300)
-      };
-    })();
-    """
 }

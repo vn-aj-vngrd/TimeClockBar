@@ -4,12 +4,17 @@ TimeClockBar is a single-target macOS SwiftUI app with AppKit integration for me
 
 ## Main Flow
 
-- `TimeClockBarApp.swift` starts the app and installs `AppDelegate`.
-- `AppDelegate.swift` owns app lifecycle, `NSStatusItem`, popover setup, global hotkey registration, network and sleep monitoring, and right-click menu actions.
-- `TimeclockController.swift` owns app state, WebKit navigation, polling, reminders, launch-at-login state, persisted preferences, and notification actions.
-- `PopoverView.swift` renders the popover chrome, embedded pages, settings UI, and bindings into `TimeclockController`.
-- `WebView.swift` wraps a shared `WKWebView` for SwiftUI.
-- `TimeclockState.swift` contains status and menu-title domain types.
+- `App/TimeClockBarApp.swift` starts the app and installs `AppDelegate`.
+- `App/AppDelegate.swift` owns app lifecycle, `NSStatusItem`, popover setup, global hotkey registration, network and sleep monitoring, and right-click menu actions.
+- `Controllers/TimeclockController.swift` owns published app state, WebKit navigation, polling coordination, launch-at-login state, and persisted preferences.
+- `Support/TimeclockDOMDetector.swift` owns the JavaScript extraction contract and DOM detection payload.
+- `Support/TimeclockReminderScheduler.swift` owns notification categories, reminder scheduling, snooze/test notifications, and legacy reminder cleanup.
+- `Support/HotkeyFormatting.swift` owns keyboard shortcut labels.
+- `Views/Popover/PopoverView.swift` renders the popover chrome, embedded pages, page switching, and settings popover entry point.
+- `Views/Popover/SettingsPopover.swift` renders settings UI and binds preferences into `TimeclockController`.
+- `Views/Popover/PreferenceRows.swift`, `HotkeyRecorderButton.swift`, `IconButton.swift`, and `PopoverStyle.swift` contain focused popover UI components and styling.
+- `Views/Web/WebView.swift` wraps a shared `WKWebView` for SwiftUI.
+- `Models/TimeclockState.swift` contains status and menu-title domain types.
 
 ## State And Persistence
 
@@ -23,5 +28,4 @@ Runtime state is exposed from `TimeclockController` with `@Published` properties
 - Carbon registers the global hotkey.
 - Network and workspace notifications pause polling when offline or asleep.
 
-Keep new behavior in the smallest owner that already controls the related state or lifecycle.
-
+Keep new behavior in the smallest owner that already controls the related state, lifecycle, UI, or platform integration.

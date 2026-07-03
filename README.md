@@ -25,13 +25,22 @@ xcodebuild -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration D
 
 There is no separate package manager, backend service, database, or web build step in this repository.
 
+## Source Layout
+
+- `TimeClockBar/App/` contains the SwiftUI app entry point and AppKit delegate.
+- `TimeClockBar/Controllers/` contains stateful app coordinators.
+- `TimeClockBar/Models/` contains shared domain types.
+- `TimeClockBar/Support/` contains focused helpers for DOM detection, reminders, and hotkey labels.
+- `TimeClockBar/Views/` contains SwiftUI views and AppKit bridges.
+- `TimeClockBar/Resources/` contains assets and entitlements.
+
 ## Project Docs
 
 - `AGENTS.md` contains agent-facing rules.
 - `docs/ai/architecture.md` describes the app structure.
+- `docs/ai/code-structure.md` captures the source layout, ownership boundaries, and split rules.
 - `docs/ai/development.md` covers local workflow.
 - `docs/ai/testing.md` lists validation commands.
 - `docs/ai/release.md` covers release checks.
 - `docs/ai/coding-standards.md` captures implementation conventions.
 - `docs/ai/pr-guidelines.md` captures PR expectations.
-

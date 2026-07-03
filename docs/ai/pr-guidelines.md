@@ -16,9 +16,10 @@ Also list manual checks for menu-bar, popover, WebKit, notification, hotkey, or 
 
 ## Review Focus
 
-- State ownership stays in the existing controller or delegate owner.
+- State ownership stays in `Controllers/TimeclockController.swift`.
+- Platform integration stays in the existing `App/` or `Support/` owner.
+- Popover UI stays under `Views/Popover/`.
 - Preferences remain backward compatible.
 - Menu-bar and popover UI remain compact and native.
 - Notification, hotkey, network, and sleep/wake behavior do not regress.
 - Docs are updated when setup, architecture, behavior, commands, or release process changes.
-
