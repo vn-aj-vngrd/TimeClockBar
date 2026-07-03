@@ -16,6 +16,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var todayProgressTitle: String = ""
     @Published private(set) var displayComponents: Set<TimeclockDisplayComponent>
     @Published private(set) var displayLabelsEnabled: Bool
+    @Published private(set) var fsLogoEnabled: Bool
     @Published private(set) var launchAtLoginEnabled: Bool
     @Published private(set) var workStartMinutes: Int
     @Published private(set) var workEndMinutes: Int
@@ -43,6 +44,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     private static let displayComponentsDefaultsKey = "timeclockDisplayComponents"
     private static let displayLabelsEnabledDefaultsKey = "displayLabelsEnabled"
+    private static let fsLogoEnabledDefaultsKey = "fsLogoEnabled"
     private static let legacyDisplayMetricDefaultsKey = "timeclockDisplayMetric"
     private static let workStartMinutesDefaultsKey = "workStartMinutes"
     private static let workEndMinutesDefaultsKey = "workEndMinutes"
@@ -90,6 +92,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
         displayComponents = Self.savedDisplayComponents()
         displayLabelsEnabled = Self.savedBool(Self.displayLabelsEnabledDefaultsKey, defaultValue: false)
+        fsLogoEnabled = Self.savedBool(Self.fsLogoEnabledDefaultsKey, defaultValue: true)
         launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
         workStartMinutes = Self.savedMinutes(Self.workStartMinutesDefaultsKey, defaultValue: 15 * 60)
         workEndMinutes = Self.savedMinutes(Self.workEndMinutesDefaultsKey, defaultValue: 0)
@@ -224,15 +227,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         scheduleReminders()
     }
 
-    func sendTestNotification() {
-        Self.sendNotification(
-            identifier: "test-reminder-\(UUID().uuidString)",
-            title: "Test reminder",
-            body: "Notifications are working. Try snooze from the notification actions.",
-            categoryIdentifier: Self.reminderCategoryIdentifier
-        )
-    }
-
     func snoozeNotification(title: String, body: String, categoryIdentifier: String, minutes: Int) {
         Self.sendNotification(
             identifier: "snooze-\(UUID().uuidString)",
@@ -240,6 +234,33 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             body: body,
             categoryIdentifier: categoryIdentifier,
             delaySeconds: TimeInterval(minutes * 60)
+        )
+    }
+
+    func sendTestShiftReminder() {
+        Self.sendNotification(
+            identifier: "test-shift-reminder-\(UUID().uuidString)",
+            title: "Shift starts soon",
+            body: "Your work shift starts in \(workReminderLeadMinutes) minutes.",
+            categoryIdentifier: Self.reminderCategoryIdentifier
+        )
+    }
+
+    func sendTestBreakReminder() {
+        Self.sendNotification(
+            identifier: "test-break-reminder-\(UUID().uuidString)",
+            title: "Break reminder",
+            body: "Time for your preferred break.",
+            categoryIdentifier: Self.reminderCategoryIdentifier
+        )
+    }
+
+    func sendTestClockOutReminder() {
+        Self.sendNotification(
+            identifier: "test-clock-out-reminder-\(UUID().uuidString)",
+            title: "Clock out reminder",
+            body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
+            categoryIdentifier: Self.reportReminderCategoryIdentifier
         )
     }
 
@@ -289,12 +310,64 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         updateMenuBarTitle()
     }
 
+    func setFSLogoEnabled(_ isEnabled: Bool) {
+        guard fsLogoEnabled != isEnabled else { return }
+
+        fsLogoEnabled = isEnabled
+        UserDefaults.standard.set(isEnabled, forKey: Self.fsLogoEnabledDefaultsKey)
+    }
+
     func resetDisplayDefaults() {
         displayComponents = [.day]
         displayLabelsEnabled = false
+        fsLogoEnabled = true
         UserDefaults.standard.set(Self.storedDisplayComponents(displayComponents), forKey: Self.displayComponentsDefaultsKey)
         UserDefaults.standard.set(displayLabelsEnabled, forKey: Self.displayLabelsEnabledDefaultsKey)
+        UserDefaults.standard.set(fsLogoEnabled, forKey: Self.fsLogoEnabledDefaultsKey)
         updateMenuBarTitle()
+    }
+
+    func resetAllDefaults() {
+        setLaunchAtLoginEnabled(false)
+
+        displayComponents = [.day]
+        displayLabelsEnabled = false
+        fsLogoEnabled = true
+        workStartMinutes = 15 * 60
+        workEndMinutes = 0
+        breakDurationMinutes = 60
+        workReminderEnabled = true
+        workReminderLeadMinutes = 15
+        breakReminderEnabled = false
+        breakReminderMinutes = 19 * 60
+        clockOutReminderEnabled = true
+        clockOutReminderLeadMinutes = 15
+        workingWeekdays = Self.defaultWorkingWeekdays
+        isRecordingHotkey = false
+        hotkeyEnabled = true
+        hotkeyKeyCode = Self.defaultHotkeyKeyCode
+        hotkeyModifierFlags = Self.defaultHotkeyModifiers
+
+        UserDefaults.standard.set(Self.storedDisplayComponents(displayComponents), forKey: Self.displayComponentsDefaultsKey)
+        UserDefaults.standard.set(displayLabelsEnabled, forKey: Self.displayLabelsEnabledDefaultsKey)
+        UserDefaults.standard.set(fsLogoEnabled, forKey: Self.fsLogoEnabledDefaultsKey)
+        UserDefaults.standard.set(workStartMinutes, forKey: Self.workStartMinutesDefaultsKey)
+        UserDefaults.standard.set(workEndMinutes, forKey: Self.workEndMinutesDefaultsKey)
+        UserDefaults.standard.set(breakDurationMinutes, forKey: Self.breakDurationMinutesDefaultsKey)
+        UserDefaults.standard.set(workReminderEnabled, forKey: Self.workReminderEnabledDefaultsKey)
+        UserDefaults.standard.set(workReminderLeadMinutes, forKey: Self.workReminderLeadMinutesDefaultsKey)
+        UserDefaults.standard.set(breakReminderEnabled, forKey: Self.breakReminderEnabledDefaultsKey)
+        UserDefaults.standard.set(breakReminderMinutes, forKey: Self.breakReminderMinutesDefaultsKey)
+        UserDefaults.standard.set(clockOutReminderEnabled, forKey: Self.clockOutReminderEnabledDefaultsKey)
+        UserDefaults.standard.set(clockOutReminderLeadMinutes, forKey: Self.clockOutReminderLeadMinutesDefaultsKey)
+        UserDefaults.standard.set(Self.storedWorkingWeekdays(workingWeekdays), forKey: Self.workingWeekdaysDefaultsKey)
+        UserDefaults.standard.set(hotkeyEnabled, forKey: Self.hotkeyEnabledDefaultsKey)
+        UserDefaults.standard.set(Int(hotkeyKeyCode), forKey: Self.hotkeyKeyCodeDefaultsKey)
+        UserDefaults.standard.set(Int(hotkeyModifierFlags.rawValue), forKey: Self.hotkeyModifiersDefaultsKey)
+
+        updateTodayProgressTitle()
+        updateMenuBarTitle()
+        scheduleReminders()
     }
 
     func setHotkeyEnabled(_ isEnabled: Bool) {
@@ -481,8 +554,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         hasSentLoginNotification = true
         Self.sendNotification(
             identifier: Self.loginRequiredNotificationIdentifier,
-            title: "Timeclock login expired",
-            body: "Open TimeClockBar to sign in again.",
+            title: "TimeClock Bar login expired",
+            body: "Open TimeClock Bar to sign in again.",
             categoryIdentifier: Self.loginRequiredCategoryIdentifier
         )
     }
@@ -840,7 +913,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     static func registerNotificationCategories() {
         let openTimeclock = UNNotificationAction(
             identifier: openTimeclockNotificationActionIdentifier,
-            title: "Open Timeclock",
+            title: "Open TimeClock Bar",
             options: [.foreground]
         )
         let openReport = UNNotificationAction(

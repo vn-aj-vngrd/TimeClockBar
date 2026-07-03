@@ -30,7 +30,7 @@ struct PopoverView: View {
                 IconButton(settingsTooltip, systemImage: "gearshape") {
                     controller.isSettingsPresented.toggle()
                 }
-                .popover(isPresented: $controller.isSettingsPresented, arrowEdge: .top) {
+                .popover(isPresented: $controller.isSettingsPresented, arrowEdge: .bottom) {
                     settingsPopover
                 }
 
@@ -91,7 +91,7 @@ struct PopoverView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(page == .timeclock ? "Open daily report" : "Back to timeclock")
+        .help(page == .timeclock ? "Open daily report" : "Back to TimeClock Bar")
         .onHover { isReportHovered = $0 }
     }
 
@@ -105,7 +105,7 @@ struct PopoverView: View {
     }
 
     private var settingsTooltip: String {
-        controller.hotkeyEnabled ? "Settings · \(controller.hotkeyLabel) toggles app" : "Settings"
+        "Settings"
     }
 
     private var currentURL: URL {
@@ -203,6 +203,13 @@ struct PopoverView: View {
         )
     }
 
+    private var fsLogoBinding: Binding<Bool> {
+        Binding(
+            get: { controller.fsLogoEnabled },
+            set: { controller.setFSLogoEnabled($0) }
+        )
+    }
+
     private var hotkeyEnabledBinding: Binding<Bool> {
         Binding(
             get: { controller.hotkeyEnabled },
@@ -224,132 +231,163 @@ struct PopoverView: View {
     }
 
     private var settingsPopover: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 0) {
             Text("Settings")
                 .font(.system(size: 14, weight: .semibold))
-
-            PreferenceSection("Display") {
-                PreferenceToggleRow("Show labels", isOn: displayLabelsBinding)
-
-                ForEach(TimeclockDisplayComponent.allCases) { component in
-                    PreferenceToggleRow(component.label, isOn: displayComponentBinding(component))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .frame(height: 46)
+                .background(.regularMaterial)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(ChromeColor.border)
+                        .frame(height: 1)
                 }
 
-                PreferenceRow("Defaults") {
-                    Button("Reset") {
-                        controller.resetDisplayDefaults()
-                    }
-                    .controlSize(.small)
-                }
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    PreferenceSection("Display") {
+                        PreferenceToggleRow("Show FS logo", isOn: fsLogoBinding)
+                        PreferenceToggleRow("Show labels", isOn: displayLabelsBinding)
 
-            PreferenceSection("Shift") {
-                WorkingDaysRow(selectedWeekdays: controller.workingWeekdays) { weekday, isEnabled in
-                    controller.setWorkingWeekday(weekday, isEnabled: isEnabled)
-                }
-                TimeRow("Start", selection: workStartBinding)
-                TimeRow("End", selection: workEndBinding)
-                DurationRow("Break", selection: breakDurationBinding)
-            }
+                        ForEach(TimeclockDisplayComponent.allCases) { component in
+                            PreferenceToggleRow(component.label, isOn: displayComponentBinding(component))
+                        }
 
-            PreferenceSection("Notifications") {
-                PreferenceRow("Permission") {
-                    HStack(spacing: 8) {
-                        Text(notificationPermissionLabel)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(notificationPermissionEnabled ? ChromeColor.secondaryText : ChromeColor.primaryText)
-
-                        if !notificationPermissionEnabled {
-                            Button("Open") {
-                                openNotificationSettings()
+                        PreferenceRow("Defaults") {
+                            Button("Reset") {
+                                controller.resetDisplayDefaults()
                             }
                             .controlSize(.small)
                         }
                     }
-                }
 
-                PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
-
-                if controller.workReminderEnabled {
-                    PreferenceRow("Before shift time") {
-                        leadTimePicker(selection: workReminderLeadBinding)
-                    }
-                }
-
-                PreferenceToggleRow("Break reminder", isOn: breakReminderEnabledBinding)
-
-                if controller.breakReminderEnabled {
-                    TimeRow("At", selection: breakReminderBinding)
-                }
-
-                PreferenceToggleRow("Clock out reminder", isOn: clockOutReminderEnabledBinding)
-
-                if controller.clockOutReminderEnabled {
-                    PreferenceRow("Before clock out") {
-                        leadTimePicker(selection: clockOutReminderLeadBinding)
-                    }
-                }
-
-                #if DEBUG
-                    PreferenceRow("Test") {
-                        Button("Send") {
-                            controller.sendTestNotification()
+                    PreferenceSection("Shift") {
+                        WorkingDaysRow(selectedWeekdays: controller.workingWeekdays) { weekday, isEnabled in
+                            controller.setWorkingWeekday(weekday, isEnabled: isEnabled)
                         }
-                        .controlSize(.small)
+                        TimeRow("Start", selection: workStartBinding)
+                        TimeRow("End", selection: workEndBinding)
+                        DurationRow("Break", selection: breakDurationBinding)
                     }
-                #endif
-            }
 
-            PreferenceSection("App") {
-                PreferenceToggleRow("Launch at Login", isOn: launchAtLoginBinding)
-                PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
+                    PreferenceSection("Notifications") {
+                        PreferenceRow("Permission") {
+                            HStack(spacing: 8) {
+                                Text(notificationPermissionLabel)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(notificationPermissionEnabled ? ChromeColor.secondaryText : ChromeColor.primaryText)
 
-                if controller.hotkeyEnabled {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Text("Toggle App")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(ChromeColor.secondaryText)
-                                .fixedSize(horizontal: true, vertical: false)
-
-                            Spacer(minLength: 12)
-
-                            HotkeyRecorderButton(
-                                label: controller.hotkeyLabel,
-                                isRecording: hotkeyRecordingBinding
-                            ) { keyCode, modifiers in
-                                controller.setHotkey(keyCode: keyCode, modifiers: modifiers)
+                                if !notificationPermissionEnabled {
+                                    Button("Open") {
+                                        openNotificationSettings()
+                                    }
+                                    .controlSize(.small)
+                                }
                             }
+                        }
 
-                            if !controller.isDefaultHotkey {
-                                Button("Reset") {
-                                    setHotkeyRecording(false)
-                                    controller.resetHotkeyDefaults()
+                        PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
+
+                        if controller.workReminderEnabled {
+                            PreferenceRow("Before shift time") {
+                                leadTimePicker(selection: workReminderLeadBinding)
+                            }
+                        }
+
+                        PreferenceToggleRow("Break reminder", isOn: breakReminderEnabledBinding)
+
+                        if controller.breakReminderEnabled {
+                            TimeRow("At", selection: breakReminderBinding)
+                        }
+
+                        PreferenceToggleRow("Clock out reminder", isOn: clockOutReminderEnabledBinding)
+
+                        if controller.clockOutReminderEnabled {
+                            PreferenceRow("Before clock out") {
+                                leadTimePicker(selection: clockOutReminderLeadBinding)
+                            }
+                        }
+
+                        #if DEBUG
+                            PreferenceRow("Test") {
+                                HStack(spacing: 6) {
+                                    Button("Shift") {
+                                        controller.sendTestShiftReminder()
+                                    }
+                                    Button("Break") {
+                                        controller.sendTestBreakReminder()
+                                    }
+                                    Button("Clock Out") {
+                                        controller.sendTestClockOutReminder()
+                                    }
                                 }
                                 .controlSize(.small)
-                                .fixedSize(horizontal: true, vertical: false)
                             }
-                        }
-                        .frame(maxWidth: .infinity)
+                        #endif
+                    }
 
-                        if isRecordingHotkey {
-                            Text("Press a modifier + key. Esc or Clear cancels.")
-                                .font(.system(size: 11, weight: .regular))
-                                .foregroundStyle(ChromeColor.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
+                    PreferenceSection("App") {
+                        PreferenceToggleRow("Launch at Login", isOn: launchAtLoginBinding)
+                        PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
+
+                        if controller.hotkeyEnabled {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Text("Toggle App")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(ChromeColor.secondaryText)
+                                        .fixedSize(horizontal: true, vertical: false)
+
+                                    Spacer(minLength: 12)
+
+                                    HotkeyRecorderButton(
+                                        label: controller.hotkeyLabel,
+                                        isRecording: hotkeyRecordingBinding
+                                    ) { keyCode, modifiers in
+                                        controller.setHotkey(keyCode: keyCode, modifiers: modifiers)
+                                    }
+
+                                    if !controller.isDefaultHotkey {
+                                        Button("Reset") {
+                                            setHotkeyRecording(false)
+                                            controller.resetHotkeyDefaults()
+                                        }
+                                        .controlSize(.small)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+
+                                if isRecordingHotkey {
+                                    Text("Press a modifier + key. Esc or Clear cancels.")
+                                        .font(.system(size: 11, weight: .regular))
+                                        .foregroundStyle(ChromeColor.secondaryText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        PreferenceRow("Defaults") {
+                            Button("Reset All") {
+                                setHotkeyRecording(false)
+                                controller.resetAllDefaults()
+                            }
+                            .controlSize(.small)
+                        }
+
+                        PreferenceRow("Quit App") {
+                            Button("Quit", action: quit)
+                                .controlSize(.small)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                PreferenceRow("Quit App") {
-                    Button("Quit", action: quit)
-                        .controlSize(.small)
-                }
+                .padding(16)
             }
         }
-        .padding(16)
         .frame(width: 420)
+        .frame(maxHeight: 560)
         .onAppear {
             controller.refreshNotificationAuthorizationStatus()
         }

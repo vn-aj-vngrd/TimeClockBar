@@ -80,7 +80,7 @@ enum TimeclockState: Equatable {
     var headerTitle: String {
         switch self {
         case .loading:
-            return "Loading timeclock"
+            return "Loading TimeClock Bar"
         case .loginRequired:
             return "Login required"
         case .stale:

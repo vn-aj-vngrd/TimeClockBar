@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     private var stateCancellable: AnyCancellable?
     private var hotkeyCancellable: AnyCancellable?
     private var hotkeyLabelCancellable: AnyCancellable?
+    private var fsLogoCancellable: AnyCancellable?
     private var hotkeyRef: EventHotKeyRef?
     private var hotkeyEventHandler: EventHandlerRef?
     private let pathMonitor = NWPathMonitor()
@@ -27,12 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        NSApp.applicationIconImage = Self.brandAppImage()
         UNUserNotificationCenter.current().delegate = self
 
         configureStatusItem()
         configurePopover()
         bindStatusTitle()
         bindStatusTooltip()
+        bindStatusLogo()
         installHotkeyHandler()
         bindHotkey()
         startSystemMonitoring()
@@ -61,7 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     private func configureStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = controller.menuBarTitle
+        item.button?.title = statusTitle(controller.menuBarTitle)
+        item.button?.image = controller.fsLogoEnabled ? Self.brandStatusImage() : nil
+        item.button?.imagePosition = .imageLeading
         item.button?.target = self
         item.button?.action = #selector(handleStatusItemClick)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -84,7 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         stateCancellable = controller.$menuBarTitle
             .receive(on: RunLoop.main)
             .sink { [weak self] title in
-                self?.statusItem?.button?.title = title
+                self?.statusItem?.button?.title = self?.statusTitle(title) ?? title
             }
     }
 
@@ -99,6 +104,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             let shortcut = isEnabled ? " · \(label) toggles" : ""
             self?.statusItem?.button?.toolTip = "Click to open\(shortcut) · Right-click for menu"
         }
+    }
+
+    private func bindStatusLogo() {
+        fsLogoCancellable = controller.$fsLogoEnabled
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isEnabled in
+                self?.statusItem?.button?.image = isEnabled ? Self.brandStatusImage() : nil
+                self?.statusItem?.button?.title = self?.statusTitle(self?.controller.menuBarTitle ?? "") ?? ""
+            }
+    }
+
+    private func statusTitle(_ title: String) -> String {
+        controller.fsLogoEnabled ? " \(title)" : title
     }
 
     private func installHotkeyHandler() {
@@ -227,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         let menu = NSMenu()
         menu.addItem(menuItem("Settings", #selector(openSettingsFromMenu)))
         menu.addItem(menuItem("Refresh", #selector(refreshFromMenu)))
-        menu.addItem(menuItem("Open Timeclock in Browser", #selector(openTimeclockFromMenu)))
+        menu.addItem(menuItem("Open TimeClock Bar in Browser", #selector(openTimeclockFromMenu)))
         menu.addItem(menuItem("Open Daily Report in Browser", #selector(openDailyReportFromMenu)))
         menu.addItem(.separator())
         menu.addItem(menuItem("Quit", #selector(quitFromMenu)))
@@ -266,6 +284,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     private func openBrowser(url: URL) {
         NSWorkspace.shared.open(url)
+    }
+
+    private static func brandStatusImage() -> NSImage? {
+        guard let image = NSImage(named: "BrandIcon") else { return nil }
+
+        image.size = NSSize(width: 18, height: 18)
+        image.isTemplate = false
+        return image
+    }
+
+    private static func brandAppImage() -> NSImage? {
+        guard let image = NSImage(named: "BrandIcon") else { return nil }
+
+        image.size = NSSize(width: 256, height: 256)
+        image.isTemplate = false
+        return image
     }
 
     func userNotificationCenter(
