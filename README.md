@@ -43,4 +43,3 @@ There is no separate package manager, backend service, database, or web build st
 - `docs/ai/testing.md` lists validation commands.
 - `docs/ai/release.md` covers release checks.
 - `docs/ai/coding-standards.md` captures implementation conventions.
-- `docs/ai/pr-guidelines.md` captures PR expectations.

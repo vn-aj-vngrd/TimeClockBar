@@ -13,7 +13,6 @@ Use this file as the starting context for code, docs, tests, reviews, and releas
 - `docs/ai/testing.md` for the current testing strategy.
 - `docs/ai/release.md` for release checks.
 - `docs/ai/coding-standards.md` for Swift and UI conventions.
-- `docs/ai/pr-guidelines.md` for review expectations.
 
 ## Working Rules
 
