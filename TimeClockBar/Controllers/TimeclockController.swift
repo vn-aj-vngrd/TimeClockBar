@@ -25,14 +25,18 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var workReminderLeadMinutes: Int
     @Published private(set) var breakReminderEnabled: Bool
     @Published private(set) var breakReminderMinutes: Int
+    @Published private(set) var breakOverReminderEnabled: Bool
     @Published private(set) var clockOutReminderEnabled: Bool
     @Published private(set) var clockOutReminderLeadMinutes: Int
+    @Published private(set) var overtimeReminderEnabled: Bool
     @Published private(set) var workingWeekdays: Set<Int>
     @Published private(set) var hotkeyEnabled: Bool
     @Published private(set) var hotkeyKeyCode: UInt32
     @Published private(set) var hotkeyModifierFlags: NSEvent.ModifierFlags
     @Published private(set) var isRecordingHotkey = false
     @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published private(set) var isPolling = false
+    @Published private(set) var lastRefreshedAt: Date?
     @Published var isSettingsPresented = false
     @Published private(set) var requestedPopoverPage: PopoverPage?
 
@@ -42,6 +46,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private var lastRunningTimerValue = ""
     private var lastRunningTimerChangedAt = Date()
     private var hasSentLoginNotification = false
+    private var hasSentOvertimeNotification = false
+    private var overtimeMinutes = 0
 
     private static let displayComponentsDefaultsKey = "timeclockDisplayComponents"
     private static let displayLabelsEnabledDefaultsKey = "displayLabelsEnabled"
@@ -54,8 +60,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let workReminderLeadMinutesDefaultsKey = "workReminderLeadMinutes"
     private static let breakReminderEnabledDefaultsKey = "breakReminderEnabled"
     private static let breakReminderMinutesDefaultsKey = "breakReminderMinutes"
+    private static let breakOverReminderEnabledDefaultsKey = "breakOverReminderEnabled"
     private static let clockOutReminderEnabledDefaultsKey = "clockOutReminderEnabled"
     private static let clockOutReminderLeadMinutesDefaultsKey = "clockOutReminderLeadMinutes"
+    private static let overtimeReminderEnabledDefaultsKey = "overtimeReminderEnabled"
     private static let workingWeekdaysDefaultsKey = "workingWeekdays"
     private static let hotkeyEnabledDefaultsKey = "hotkeyEnabled"
     private static let hotkeyKeyCodeDefaultsKey = "hotkeyKeyCode"
@@ -90,8 +98,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workReminderLeadMinutes = Self.savedMinutes(Self.workReminderLeadMinutesDefaultsKey, defaultValue: 15)
         breakReminderEnabled = Self.savedBool(Self.breakReminderEnabledDefaultsKey, defaultValue: false)
         breakReminderMinutes = Self.savedMinutes(Self.breakReminderMinutesDefaultsKey, defaultValue: 19 * 60)
+        breakOverReminderEnabled = Self.savedBool(Self.breakOverReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderEnabled = Self.savedBool(Self.clockOutReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderLeadMinutes = Self.savedMinutes(Self.clockOutReminderLeadMinutesDefaultsKey, defaultValue: 15)
+        overtimeReminderEnabled = Self.savedBool(Self.overtimeReminderEnabledDefaultsKey, defaultValue: true)
         workingWeekdays = Self.savedWorkingWeekdays()
         hotkeyEnabled = Self.savedBool(Self.hotkeyEnabledDefaultsKey, defaultValue: true)
         hotkeyKeyCode = UInt32(UserDefaults.standard.object(forKey: Self.hotkeyKeyCodeDefaultsKey) as? Int ?? Int(Self.defaultHotkeyKeyCode))
@@ -182,6 +192,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UserDefaults.standard.set(breakDurationMinutes, forKey: Self.breakDurationMinutesDefaultsKey)
         updateTodayProgressTitle()
         updateMenuBarTitle()
+        scheduleReminders()
     }
 
     func setWorkReminderEnabled(_ isEnabled: Bool) {
@@ -208,6 +219,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         scheduleReminders()
     }
 
+    func setBreakOverReminderEnabled(_ isEnabled: Bool) {
+        breakOverReminderEnabled = isEnabled
+        UserDefaults.standard.set(isEnabled, forKey: Self.breakOverReminderEnabledDefaultsKey)
+        scheduleReminders()
+    }
+
     func setClockOutReminderEnabled(_ isEnabled: Bool) {
         clockOutReminderEnabled = isEnabled
         UserDefaults.standard.set(isEnabled, forKey: Self.clockOutReminderEnabledDefaultsKey)
@@ -218,6 +235,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         clockOutReminderLeadMinutes = minutes
         UserDefaults.standard.set(minutes, forKey: Self.clockOutReminderLeadMinutesDefaultsKey)
         scheduleReminders()
+    }
+
+    func setOvertimeReminderEnabled(_ isEnabled: Bool) {
+        overtimeReminderEnabled = isEnabled
+        UserDefaults.standard.set(isEnabled, forKey: Self.overtimeReminderEnabledDefaultsKey)
+        handleOvertimeNotification(for: state)
     }
 
     func snoozeNotification(title: String, body: String, categoryIdentifier: String, minutes: Int) {
@@ -248,11 +271,29 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         )
     }
 
+    func sendTestBreakOverReminder() {
+        TimeclockReminderScheduler.sendNotification(
+            identifier: "test-break-over-reminder-\(UUID().uuidString)",
+            title: "Break over",
+            body: "Time to end your break.",
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
+        )
+    }
+
     func sendTestClockOutReminder() {
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-clock-out-reminder-\(UUID().uuidString)",
             title: "Clock out reminder",
             body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
+            categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
+        )
+    }
+
+    func sendTestOvertimeReminder() {
+        TimeclockReminderScheduler.sendNotification(
+            identifier: "test-overtime-reminder-\(UUID().uuidString)",
+            title: "Overtime",
+            body: "You are over today's target. Submit your report before clocking out.",
             categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
         )
     }
@@ -333,8 +374,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workReminderLeadMinutes = 15
         breakReminderEnabled = false
         breakReminderMinutes = 19 * 60
+        breakOverReminderEnabled = true
         clockOutReminderEnabled = true
         clockOutReminderLeadMinutes = 15
+        overtimeReminderEnabled = true
         workingWeekdays = Self.defaultWorkingWeekdays
         isRecordingHotkey = false
         hotkeyEnabled = true
@@ -351,8 +394,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UserDefaults.standard.set(workReminderLeadMinutes, forKey: Self.workReminderLeadMinutesDefaultsKey)
         UserDefaults.standard.set(breakReminderEnabled, forKey: Self.breakReminderEnabledDefaultsKey)
         UserDefaults.standard.set(breakReminderMinutes, forKey: Self.breakReminderMinutesDefaultsKey)
+        UserDefaults.standard.set(breakOverReminderEnabled, forKey: Self.breakOverReminderEnabledDefaultsKey)
         UserDefaults.standard.set(clockOutReminderEnabled, forKey: Self.clockOutReminderEnabledDefaultsKey)
         UserDefaults.standard.set(clockOutReminderLeadMinutes, forKey: Self.clockOutReminderLeadMinutesDefaultsKey)
+        UserDefaults.standard.set(overtimeReminderEnabled, forKey: Self.overtimeReminderEnabledDefaultsKey)
         UserDefaults.standard.set(Self.storedWorkingWeekdays(workingWeekdays), forKey: Self.workingWeekdaysDefaultsKey)
         UserDefaults.standard.set(hotkeyEnabled, forKey: Self.hotkeyEnabledDefaultsKey)
         UserDefaults.standard.set(Int(hotkeyKeyCode), forKey: Self.hotkeyKeyCodeDefaultsKey)
@@ -407,6 +452,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func startPolling() {
         stopPolling()
+        isPolling = true
 
         let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.readTimeclockState()
@@ -418,6 +464,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     func stopPolling() {
         pollTimer?.invalidate()
         pollTimer = nil
+        isPolling = false
     }
 
     func readTimeclockState() {
@@ -432,6 +479,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 return
             }
 
+            self.lastRefreshedAt = Date()
             let detection = TimeclockDOMDetection(result as? [String: Any])
             self.lastDetection = detection
             let nextTimers = TimeclockDOMDetector.timers(from: detection)
@@ -443,10 +491,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             let resolvedState = self.stateWithStaleCheck(nextState, timers: nextTimers)
             if resolvedState == .stale {
                 self.todayProgressTitle = ""
+                self.overtimeMinutes = 0
             }
             self.state = resolvedState
+            self.handleOvertimeNotification(for: resolvedState)
             self.updateMenuBarTitle()
-            if previousState != resolvedState {
+            if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(resolvedState) {
                 self.scheduleReminders()
             }
         }
@@ -497,23 +547,32 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         guard workingWeekdays.contains(Calendar.current.component(.weekday, from: Date())) else {
             let dayMinutes = parsedDayMinutes ?? 0
             todayProgressTitle = dayMinutes > 0 ? "Today +\(TimeclockTimeMath.durationLabel(minutes: dayMinutes))" : "Off today"
+            overtimeMinutes = 0
             return
         }
 
         guard let dayMinutes = parsedDayMinutes else {
             todayProgressTitle = ""
+            overtimeMinutes = 0
             return
         }
 
-        let targetMinutes = max(0, TimeclockTimeMath.shiftDurationMinutes(start: workStartMinutes, end: workEndMinutes) - breakDurationMinutes)
-        let remainingMinutes = targetMinutes - dayMinutes
+        let remainingMinutes = TimeclockTimeMath.remainingWorkMinutes(
+            dayMinutes: dayMinutes,
+            start: workStartMinutes,
+            end: workEndMinutes,
+            breakDuration: breakDurationMinutes
+        )
 
         if remainingMinutes > 0 {
             todayProgressTitle = "Today \(TimeclockTimeMath.durationLabel(minutes: remainingMinutes)) left"
+            overtimeMinutes = 0
         } else if remainingMinutes < 0 {
-            todayProgressTitle = "Today +\(TimeclockTimeMath.durationLabel(minutes: abs(remainingMinutes)))"
+            overtimeMinutes = abs(remainingMinutes)
+            todayProgressTitle = "Today +\(TimeclockTimeMath.durationLabel(minutes: overtimeMinutes))"
         } else {
             todayProgressTitle = "Today target met"
+            overtimeMinutes = 0
         }
     }
 
@@ -553,6 +612,23 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         )
     }
 
+    private func handleOvertimeNotification(for state: TimeclockState) {
+        guard overtimeReminderEnabled, overtimeMinutes > 0, Self.isWorking(state) else {
+            hasSentOvertimeNotification = false
+            return
+        }
+
+        guard !hasSentOvertimeNotification else { return }
+
+        hasSentOvertimeNotification = true
+        TimeclockReminderScheduler.sendNotification(
+            identifier: "overtime-reminder-\(UUID().uuidString)",
+            title: "Overtime",
+            body: "You are over today's target by \(TimeclockTimeMath.durationLabel(minutes: overtimeMinutes)). Submit your report before clocking out.",
+            categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
+        )
+    }
+
     private func scheduleReminders() {
         TimeclockReminderScheduler.schedule(
             state: state,
@@ -562,6 +638,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             workReminderLeadMinutes: workReminderLeadMinutes,
             breakReminderEnabled: breakReminderEnabled,
             breakReminderMinutes: breakReminderMinutes,
+            breakOverReminderEnabled: breakOverReminderEnabled,
+            breakDurationMinutes: breakDurationMinutes,
             clockOutReminderEnabled: clockOutReminderEnabled,
             workEndMinutes: workEndMinutes,
             clockOutReminderLeadMinutes: clockOutReminderLeadMinutes
@@ -624,6 +702,34 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return timers.current.isEmpty ? timers.fallback : timers.current
         case .loading, .loginRequired, .stale, .clockedOut, .unknown:
             return ""
+        }
+    }
+
+    private static func isWorking(_ state: TimeclockState) -> Bool {
+        switch state {
+        case .active, .onBreak:
+            return true
+        case .loading, .loginRequired, .stale, .clockedOut, .unknown:
+            return false
+        }
+    }
+
+    private static func reminderSchedulingState(_ state: TimeclockState) -> String {
+        switch state {
+        case .loading:
+            return "loading"
+        case .loginRequired:
+            return "loginRequired"
+        case .stale:
+            return "stale"
+        case .clockedOut:
+            return "clockedOut"
+        case .active:
+            return "active"
+        case .onBreak:
+            return "onBreak"
+        case .unknown:
+            return "unknown"
         }
     }
 

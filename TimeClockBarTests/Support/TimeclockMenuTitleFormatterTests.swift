@@ -94,4 +94,13 @@ final class TimeclockMenuTitleFormatterTests: XCTestCase {
             "Active 0:30"
         )
     }
+
+    func testStatusTooltipUsesRelativeRefreshTime() {
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        XCTAssertEqual(TimeclockStatusTooltipFormatter.tooltip(lastRefreshedAt: nil, now: now), "Not updated yet")
+        XCTAssertEqual(TimeclockStatusTooltipFormatter.tooltip(lastRefreshedAt: now.addingTimeInterval(-10), now: now), "Updated just now")
+        XCTAssertEqual(TimeclockStatusTooltipFormatter.tooltip(lastRefreshedAt: now.addingTimeInterval(-120), now: now), "Updated 2 min ago")
+        XCTAssertEqual(TimeclockStatusTooltipFormatter.tooltip(lastRefreshedAt: now.addingTimeInterval(-86_400), now: now), "Updated 1 day ago")
+    }
 }

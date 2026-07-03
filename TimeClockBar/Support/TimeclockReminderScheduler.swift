@@ -8,6 +8,7 @@ struct TimeclockReminderPlan: Equatable {
     let minutes: Int
     let weekday: Int
     let categoryIdentifier: String
+    let delaySeconds: TimeInterval?
 }
 
 enum TimeclockReminderScheduler {
@@ -24,6 +25,7 @@ enum TimeclockReminderScheduler {
     private static let weekdays = Array(1...7)
     private static let workReminderIdentifier = "work-start-reminder"
     private static let breakReminderIdentifier = "break-reminder"
+    private static let breakOverReminderIdentifier = "break-over-reminder"
     private static let clockOutReminderIdentifier = "clock-out-reminder"
 
     static func schedule(
@@ -34,6 +36,8 @@ enum TimeclockReminderScheduler {
         workReminderLeadMinutes: Int,
         breakReminderEnabled: Bool,
         breakReminderMinutes: Int,
+        breakOverReminderEnabled: Bool,
+        breakDurationMinutes: Int,
         clockOutReminderEnabled: Bool,
         workEndMinutes: Int,
         clockOutReminderLeadMinutes: Int
@@ -42,40 +46,55 @@ enum TimeclockReminderScheduler {
             [
                 workReminderIdentifier,
                 breakReminderIdentifier,
+                breakOverReminderIdentifier,
                 clockOutReminderIdentifier
             ] +
             notificationIdentifiers(prefix: workReminderIdentifier) +
             notificationIdentifiers(prefix: breakReminderIdentifier) +
+            notificationIdentifiers(prefix: breakOverReminderIdentifier) +
             notificationIdentifiers(prefix: clockOutReminderIdentifier)
 
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
 
-        guard !workingWeekdays.isEmpty,
-              workReminderEnabled || breakReminderEnabled || clockOutReminderEnabled else { return }
+        let plans = plans(
+            state: state,
+            workingWeekdays: workingWeekdays,
+            workReminderEnabled: workReminderEnabled,
+            workStartMinutes: workStartMinutes,
+            workReminderLeadMinutes: workReminderLeadMinutes,
+            breakReminderEnabled: breakReminderEnabled,
+            breakReminderMinutes: breakReminderMinutes,
+            breakOverReminderEnabled: breakOverReminderEnabled,
+            breakDurationMinutes: breakDurationMinutes,
+            clockOutReminderEnabled: clockOutReminderEnabled,
+            workEndMinutes: workEndMinutes,
+            clockOutReminderLeadMinutes: clockOutReminderLeadMinutes
+        )
+
+        guard !plans.isEmpty else { return }
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, _ in
             guard isAllowed else { return }
 
-            for plan in plans(
-                state: state,
-                workingWeekdays: workingWeekdays,
-                workReminderEnabled: workReminderEnabled,
-                workStartMinutes: workStartMinutes,
-                workReminderLeadMinutes: workReminderLeadMinutes,
-                breakReminderEnabled: breakReminderEnabled,
-                breakReminderMinutes: breakReminderMinutes,
-                clockOutReminderEnabled: clockOutReminderEnabled,
-                workEndMinutes: workEndMinutes,
-                clockOutReminderLeadMinutes: clockOutReminderLeadMinutes
-            ) {
-                scheduleWeeklyNotification(
-                    identifier: plan.identifier,
-                    title: plan.title,
-                    body: plan.body,
-                    minutes: plan.minutes,
-                    weekday: plan.weekday,
-                    categoryIdentifier: plan.categoryIdentifier
-                )
+            for plan in plans {
+                if let delaySeconds = plan.delaySeconds {
+                    scheduleIntervalNotification(
+                        identifier: plan.identifier,
+                        title: plan.title,
+                        body: plan.body,
+                        delaySeconds: delaySeconds,
+                        categoryIdentifier: plan.categoryIdentifier
+                    )
+                } else {
+                    scheduleWeeklyNotification(
+                        identifier: plan.identifier,
+                        title: plan.title,
+                        body: plan.body,
+                        minutes: plan.minutes,
+                        weekday: plan.weekday,
+                        categoryIdentifier: plan.categoryIdentifier
+                    )
+                }
             }
         }
     }
@@ -88,14 +107,31 @@ enum TimeclockReminderScheduler {
         workReminderLeadMinutes: Int,
         breakReminderEnabled: Bool,
         breakReminderMinutes: Int,
+        breakOverReminderEnabled: Bool,
+        breakDurationMinutes: Int,
         clockOutReminderEnabled: Bool,
         workEndMinutes: Int,
         clockOutReminderLeadMinutes: Int
     ) -> [TimeclockReminderPlan] {
-        guard !workingWeekdays.isEmpty,
-              workReminderEnabled || breakReminderEnabled || clockOutReminderEnabled else { return [] }
+        guard workReminderEnabled || breakReminderEnabled || breakOverReminderEnabled || clockOutReminderEnabled else { return [] }
 
-        return workingWeekdays.sorted().flatMap { weekday in
+        var oneShotPlans: [TimeclockReminderPlan] = []
+
+        if breakOverReminderEnabled && isOnBreak(state: state) {
+            oneShotPlans.append(TimeclockReminderPlan(
+                identifier: breakOverReminderIdentifier,
+                title: "Break over",
+                body: "Time to end your break.",
+                minutes: breakDurationMinutes,
+                weekday: 0,
+                categoryIdentifier: reminderCategoryIdentifier,
+                delaySeconds: TimeInterval(max(1, breakDurationMinutes * 60))
+            ))
+        }
+
+        guard !workingWeekdays.isEmpty else { return oneShotPlans }
+
+        return oneShotPlans + workingWeekdays.sorted().flatMap { weekday in
             var plans: [TimeclockReminderPlan] = []
 
             if workReminderEnabled && !isWorking(state: state) {
@@ -110,7 +146,8 @@ enum TimeclockReminderScheduler {
                         weekday,
                         byDays: TimeclockTimeMath.dayOffset(forMinutes: reminderMinutes)
                     ),
-                    categoryIdentifier: reminderCategoryIdentifier
+                    categoryIdentifier: reminderCategoryIdentifier,
+                    delaySeconds: nil
                 ))
             }
 
@@ -121,7 +158,8 @@ enum TimeclockReminderScheduler {
                     body: "Time for your preferred break.",
                     minutes: breakReminderMinutes,
                     weekday: weekday,
-                    categoryIdentifier: reminderCategoryIdentifier
+                    categoryIdentifier: reminderCategoryIdentifier,
+                    delaySeconds: nil
                 ))
             }
 
@@ -138,7 +176,8 @@ enum TimeclockReminderScheduler {
                     body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
                     minutes: reminderMinutes,
                     weekday: endWeekday,
-                    categoryIdentifier: reportReminderCategoryIdentifier
+                    categoryIdentifier: reportReminderCategoryIdentifier,
+                    delaySeconds: nil
                 ))
             }
 
@@ -219,6 +258,18 @@ enum TimeclockReminderScheduler {
             dateMatching: DateComponents(hour: normalized / 60, minute: normalized % 60, weekday: weekday),
             repeats: true
         )
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private static func scheduleIntervalNotification(identifier: String, title: String, body: String, delaySeconds: TimeInterval, categoryIdentifier: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = categoryIdentifier
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, delaySeconds), repeats: false)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }

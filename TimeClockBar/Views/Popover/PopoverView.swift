@@ -10,6 +10,7 @@ struct PopoverView: View {
     @State private var pageBeforeSettings: PopoverPage = .timeclock
 
     let openBrowser: (URL) -> Void
+    let openAbout: () -> Void
     let quit: () -> Void
 
     var body: some View {
@@ -18,7 +19,8 @@ struct PopoverView: View {
 
             content
         }
-        .frame(width: 460, height: 640)
+        .frame(width: 460)
+        .frame(minHeight: 640, maxHeight: .infinity)
         .background(Color.clear)
         .onChange(of: controller.isSettingsPresented) { _, isPresented in
             if isPresented {
@@ -81,8 +83,15 @@ struct PopoverView: View {
 
                 Spacer()
 
-                if page != .settings {
-                    pageToggleButton
+                if page == .settings {
+                    IconButton("About", systemImage: "info.circle") {
+                        openAbout()
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        statusChip
+                        pageToggleButton
+                    }
                 }
             }
         }
@@ -93,6 +102,36 @@ struct PopoverView: View {
                 .fill(ChromeColor.border)
                 .frame(height: 1)
         }
+    }
+
+    @ViewBuilder
+    private var statusChip: some View {
+        if let title = statusChipTitle {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ChromeColor.primaryText)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(ChromeColor.controlGroup)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(ChromeColor.border, lineWidth: 1)
+                )
+                .help(title == "Offline" ? "Polling paused" : "Status stale")
+        }
+    }
+
+    private var statusChipTitle: String? {
+        if !controller.isPolling {
+            return "Offline"
+        }
+
+        if controller.state == .stale {
+            return "Stale"
+        }
+
+        return nil
     }
 
     private var pageToggleButton: some View {
@@ -322,6 +361,7 @@ private struct PopoverShortcutCaptureView: NSViewRepresentable {
     PopoverView(
         controller: TimeclockController(),
         openBrowser: { _ in },
+        openAbout: {},
         quit: {}
     )
 }

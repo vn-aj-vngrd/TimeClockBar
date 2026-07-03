@@ -89,6 +89,8 @@ struct SettingsPopover: View {
                 TimeRow("At", selection: breakReminderBinding)
             }
 
+            PreferenceToggleRow("Break over reminder", isOn: breakOverReminderEnabledBinding)
+
             PreferenceToggleRow("Clock out reminder", isOn: clockOutReminderEnabledBinding)
 
             if controller.clockOutReminderEnabled {
@@ -96,6 +98,8 @@ struct SettingsPopover: View {
                     leadTimePicker(selection: clockOutReminderLeadBinding)
                 }
             }
+
+            PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
 
             #if DEBUG
                 PreferenceRow("Test") {
@@ -106,8 +110,14 @@ struct SettingsPopover: View {
                         Button("Break") {
                             controller.sendTestBreakReminder()
                         }
+                        Button("Over") {
+                            controller.sendTestBreakOverReminder()
+                        }
                         Button("Clock Out") {
                             controller.sendTestClockOutReminder()
+                        }
+                        Button("Overtime") {
+                            controller.sendTestOvertimeReminder()
                         }
                     }
                     .controlSize(.small)
@@ -247,6 +257,13 @@ struct SettingsPopover: View {
         )
     }
 
+    private var breakOverReminderEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { controller.breakOverReminderEnabled },
+            set: { controller.setBreakOverReminderEnabled($0) }
+        )
+    }
+
     private var clockOutReminderEnabledBinding: Binding<Bool> {
         Binding(
             get: { controller.clockOutReminderEnabled },
@@ -258,6 +275,13 @@ struct SettingsPopover: View {
         Binding(
             get: { controller.clockOutReminderLeadMinutes },
             set: { controller.setClockOutReminderLeadMinutes($0) }
+        )
+    }
+
+    private var overtimeReminderEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { controller.overtimeReminderEnabled },
+            set: { controller.setOvertimeReminderEnabled($0) }
         )
     }
 

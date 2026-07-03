@@ -10,6 +10,7 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
         XCTAssertTrue(defaultPlans(
             workReminderEnabled: false,
             breakReminderEnabled: false,
+            breakOverReminderEnabled: false,
             clockOutReminderEnabled: false
         ).isEmpty)
     }
@@ -26,8 +27,33 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
         XCTAssertEqual(plans.map(\.identifier), ["break-reminder-2", "clock-out-reminder-2"])
     }
 
-    func testOnBreakSkipsShiftAndBreakReminders() {
+    func testOnBreakSchedulesBreakOverReminder() throws {
         let plans = defaultPlans(state: .onBreak("0:10"))
+        let plan = try XCTUnwrap(plans.first)
+
+        XCTAssertEqual(plans.map(\.identifier), ["break-over-reminder", "clock-out-reminder-2"])
+        XCTAssertEqual(plan.title, "Break over")
+        XCTAssertEqual(plan.body, "Time to end your break.")
+        XCTAssertEqual(plan.categoryIdentifier, TimeclockReminderScheduler.reminderCategoryIdentifier)
+        XCTAssertEqual(plan.minutes, 60)
+        XCTAssertEqual(plan.delaySeconds, TimeInterval(60 * 60))
+    }
+
+    func testOnBreakSchedulesBreakOverReminderWithoutWorkingWeekdays() throws {
+        let plan = try XCTUnwrap(defaultPlans(
+            state: .onBreak("0:10"),
+            workingWeekdays: []
+        ).first)
+
+        XCTAssertEqual(plan.identifier, "break-over-reminder")
+        XCTAssertEqual(plan.delaySeconds, TimeInterval(60 * 60))
+    }
+
+    func testOnBreakSkipsBreakOverReminderWhenDisabled() {
+        let plans = defaultPlans(
+            state: .onBreak("0:10"),
+            breakOverReminderEnabled: false
+        )
 
         XCTAssertEqual(plans.map(\.identifier), ["clock-out-reminder-2"])
     }
@@ -87,6 +113,8 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
         workReminderLeadMinutes: Int = 15,
         breakReminderEnabled: Bool = true,
         breakReminderMinutes: Int = 12 * 60,
+        breakOverReminderEnabled: Bool = true,
+        breakDurationMinutes: Int = 60,
         clockOutReminderEnabled: Bool = true,
         workEndMinutes: Int = 17 * 60,
         clockOutReminderLeadMinutes: Int = 15
@@ -99,6 +127,8 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
             workReminderLeadMinutes: workReminderLeadMinutes,
             breakReminderEnabled: breakReminderEnabled,
             breakReminderMinutes: breakReminderMinutes,
+            breakOverReminderEnabled: breakOverReminderEnabled,
+            breakDurationMinutes: breakDurationMinutes,
             clockOutReminderEnabled: clockOutReminderEnabled,
             workEndMinutes: workEndMinutes,
             clockOutReminderLeadMinutes: clockOutReminderLeadMinutes

@@ -26,6 +26,12 @@ final class TimeclockTimeMathTests: XCTestCase {
         XCTAssertEqual(TimeclockTimeMath.shiftDurationMinutes(start: 0, end: 0), 1440)
     }
 
+    func testRemainingWorkMinutesCanGoNegativeForOvertime() {
+        XCTAssertEqual(TimeclockTimeMath.remainingWorkMinutes(dayMinutes: 6 * 60, start: 9 * 60, end: 17 * 60, breakDuration: 60), 60)
+        XCTAssertEqual(TimeclockTimeMath.remainingWorkMinutes(dayMinutes: 7 * 60, start: 9 * 60, end: 17 * 60, breakDuration: 60), 0)
+        XCTAssertEqual(TimeclockTimeMath.remainingWorkMinutes(dayMinutes: 8 * 60, start: 9 * 60, end: 17 * 60, breakDuration: 60), -60)
+    }
+
     func testDurationLabels() {
         XCTAssertEqual(TimeclockTimeMath.durationLabel(minutes: 45), "45m")
         XCTAssertEqual(TimeclockTimeMath.durationLabel(minutes: 60), "1h")

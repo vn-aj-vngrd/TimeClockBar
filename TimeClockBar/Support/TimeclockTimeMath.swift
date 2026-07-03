@@ -20,6 +20,11 @@ enum TimeclockTimeMath {
         return duration == 0 ? 24 * 60 : duration
     }
 
+    static func remainingWorkMinutes(dayMinutes: Int, start: Int, end: Int, breakDuration: Int) -> Int {
+        let targetMinutes = max(0, shiftDurationMinutes(start: start, end: end) - normalizedDurationMinutes(breakDuration))
+        return targetMinutes - dayMinutes
+    }
+
     static func durationLabel(minutes: Int) -> String {
         let hours = minutes / 60
         let minutes = minutes % 60

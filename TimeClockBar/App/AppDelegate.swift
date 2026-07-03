@@ -13,8 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     private var statusItem: NSStatusItem?
     private var stateCancellable: AnyCancellable?
     private var hotkeyCancellable: AnyCancellable?
-    private var hotkeyLabelCancellable: AnyCancellable?
+    private var statusTooltipCancellable: AnyCancellable?
     private var fsLogoCancellable: AnyCancellable?
+    private var tooltipTimer: Timer?
     private var hotkeyRef: EventHotKeyRef?
     private var hotkeyEventHandler: EventHandlerRef?
     private let pathMonitor = NWPathMonitor()
@@ -26,6 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
     private static let hotkeySignature: OSType = 0x54434248
     private static let hotkeyID: UInt32 = 1
+    private static let popoverWidth: CGFloat = 460
+    private static let minimumPopoverHeight: CGFloat = 640
+    private static let preferredPopoverHeight: CGFloat = 780
+    private static let popoverScreenPadding: CGFloat = 72
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -47,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
     func applicationWillTerminate(_ notification: Notification) {
         controller.stopPolling()
+        tooltipTimer?.invalidate()
         unregisterHotkey()
         pathMonitor.cancel()
 
@@ -76,12 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
     private func configurePopover() {
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 460, height: 640)
+        popover.contentSize = Self.popoverSize()
         popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(
                 controller: controller,
                 openBrowser: { [weak self] url in self?.openBrowser(url: url) },
+                openAbout: { [weak self] in self?.showAboutWindow() },
                 quit: { NSApp.terminate(nil) }
             )
         )
@@ -106,16 +113,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     }
 
     private func bindStatusTooltip() {
-        hotkeyLabelCancellable = Publishers.CombineLatest(
-            controller.$hotkeyEnabled,
-            controller.$hotkeyKeyCode.combineLatest(controller.$hotkeyModifierFlags)
-        )
-        .receive(on: RunLoop.main)
-        .sink { [weak self] isEnabled, hotkey in
-            let label = HotkeyFormatting.label(keyCode: hotkey.0, modifiers: hotkey.1)
-            let shortcut = isEnabled ? " · \(label) toggles" : ""
-            self?.statusItem?.button?.toolTip = "Click to open\(shortcut) · Right-click for menu"
+        statusTooltipCancellable = controller.$lastRefreshedAt
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateStatusTooltip()
+            }
+
+        tooltipTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.updateStatusTooltip()
         }
+    }
+
+    private func updateStatusTooltip() {
+        statusItem?.button?.toolTip = TimeclockStatusTooltipFormatter.tooltip(lastRefreshedAt: controller.lastRefreshedAt)
     }
 
     private func bindStatusLogo() {
@@ -248,6 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         guard let button = statusItem?.button else { return }
 
         NSApp.activate(ignoringOtherApps: true)
+        popover.contentSize = Self.popoverSize(for: button.window?.screen)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
 
@@ -357,6 +368,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = false
         return image
+    }
+
+    private static func popoverSize(for screen: NSScreen? = NSScreen.main) -> NSSize {
+        let availableHeight = max(0, (screen ?? NSScreen.main)?.visibleFrame.height ?? minimumPopoverHeight)
+        let responsiveHeight = min(preferredPopoverHeight, max(minimumPopoverHeight, availableHeight - popoverScreenPadding))
+        return NSSize(width: popoverWidth, height: responsiveHeight)
     }
 
     private static func brandAppImage() -> NSImage? {

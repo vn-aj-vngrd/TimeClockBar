@@ -68,3 +68,27 @@ enum TimeclockMenuTitleFormatter {
         }
     }
 }
+
+enum TimeclockStatusTooltipFormatter {
+    static func tooltip(lastRefreshedAt: Date?, now: Date = Date()) -> String {
+        guard let lastRefreshedAt else { return "Not updated yet" }
+
+        let seconds = max(0, Int(now.timeIntervalSince(lastRefreshedAt)))
+        if seconds < 60 {
+            return "Updated just now"
+        }
+
+        let minutes = seconds / 60
+        if minutes < 60 {
+            return "Updated \(minutes) min ago"
+        }
+
+        let hours = minutes / 60
+        if hours < 24 {
+            return "Updated \(hours) hr ago"
+        }
+
+        let days = hours / 24
+        return "Updated \(days) day\(days == 1 ? "" : "s") ago"
+    }
+}
