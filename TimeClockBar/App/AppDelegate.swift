@@ -6,7 +6,7 @@ import SwiftUI
 import UserNotifications
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, UNUserNotificationCenterDelegate {
     private let controller = TimeclockController()
     private let popover = NSPopover()
     private var statusItem: NSStatusItem?
@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     private func configurePopover() {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 460, height: 640)
+        popover.delegate = self
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(
                 controller: controller,
@@ -83,6 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
                 quit: { NSApp.terminate(nil) }
             )
         )
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        controller.isSettingsPresented = false
     }
 
     private func bindStatusTitle() {

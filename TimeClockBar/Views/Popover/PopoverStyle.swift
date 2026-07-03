@@ -14,4 +14,5 @@ enum ChromeColor {
 enum PopoverPage {
     case timeclock
     case dailyReport
+    case settings
 }

@@ -6,6 +6,7 @@ struct PopoverView: View {
     @State private var isReportHovered = false
     @State private var isRecordingHotkey = false
     @State private var page: PopoverPage = .timeclock
+    @State private var pageBeforeSettings: PopoverPage = .timeclock
 
     let openBrowser: (URL) -> Void
     let quit: () -> Void
@@ -14,47 +15,61 @@ struct PopoverView: View {
         VStack(spacing: 0) {
             header
 
-            WebView(webView: currentWebView)
-                .id(page)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
         }
         .frame(width: 460, height: 640)
         .background(Color.clear)
+        .onChange(of: controller.isSettingsPresented) { _, isPresented in
+            if isPresented {
+                showSettings()
+            } else if page == .settings {
+                closeSettings()
+            }
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 2) {
-                IconButton("Settings", systemImage: "gearshape") {
-                    controller.isSettingsPresented.toggle()
-                }
-                .popover(isPresented: $controller.isSettingsPresented, arrowEdge: .bottom) {
-                    SettingsPopover(
-                        controller: controller,
-                        isRecordingHotkey: $isRecordingHotkey,
-                        quit: quit
+        ZStack {
+            if page == .settings {
+                Text("Settings")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ChromeColor.primaryText)
+            }
+
+            HStack(spacing: 10) {
+                if page == .settings {
+                    IconButton("Back", systemImage: "chevron.left") {
+                        closeSettings()
+                    }
+                } else {
+                    HStack(spacing: 2) {
+                        IconButton("Settings", systemImage: "gearshape") {
+                            showSettings()
+                        }
+
+                        IconButton("Refresh", systemImage: "arrow.clockwise") {
+                            refresh()
+                        }
+
+                        IconButton("Open Browser", systemImage: "arrow.up.right.square") {
+                            openBrowser(currentURL)
+                        }
+                    }
+                    .padding(3)
+                    .background(ChromeColor.controlGroup)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(ChromeColor.border, lineWidth: 1)
                     )
                 }
 
-                IconButton("Refresh", systemImage: "arrow.clockwise") {
-                    refresh()
-                }
+                Spacer()
 
-                IconButton("Open Browser", systemImage: "arrow.up.right.square") {
-                    openBrowser(currentURL)
+                if page != .settings {
+                    pageToggleButton
                 }
             }
-            .padding(3)
-            .background(ChromeColor.controlGroup)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(ChromeColor.border, lineWidth: 1)
-            )
-
-            Spacer()
-
-            pageToggleButton
         }
         .padding(.horizontal, 14)
         .frame(height: 50)
@@ -73,6 +88,8 @@ struct PopoverView: View {
                 page = .dailyReport
             case .dailyReport:
                 page = .timeclock
+            case .settings:
+                closeSettings()
             }
         } label: {
             HStack(spacing: 7) {
@@ -97,12 +114,30 @@ struct PopoverView: View {
         .onHover { isReportHovered = $0 }
     }
 
+    private var content: some View {
+        Group {
+            if page == .settings {
+                SettingsPopover(
+                    controller: controller,
+                    isRecordingHotkey: $isRecordingHotkey,
+                    quit: quit
+                )
+            } else {
+                WebView(webView: currentWebView)
+                    .id(page)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var currentWebView: WKWebView {
         switch page {
         case .timeclock:
             return controller.webView
         case .dailyReport:
             return controller.dailyReportWebView
+        case .settings:
+            return controller.webView
         }
     }
 
@@ -112,6 +147,8 @@ struct PopoverView: View {
             return controller.url
         case .dailyReport:
             return controller.dailyReportURL
+        case .settings:
+            return controller.url
         }
     }
 
@@ -121,7 +158,23 @@ struct PopoverView: View {
             controller.reload()
         case .dailyReport:
             controller.reloadDailyReport()
+        case .settings:
+            break
         }
+    }
+
+    private func showSettings() {
+        if page != .settings {
+            pageBeforeSettings = page
+        }
+
+        page = .settings
+        controller.isSettingsPresented = true
+    }
+
+    private func closeSettings() {
+        page = pageBeforeSettings == .settings ? .timeclock : pageBeforeSettings
+        controller.isSettingsPresented = false
     }
 }
 

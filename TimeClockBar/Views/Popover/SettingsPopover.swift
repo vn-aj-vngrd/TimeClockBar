@@ -9,41 +9,21 @@ struct SettingsPopover: View {
     let quit: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            titleBar
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    displaySection
-                    shiftSection
-                    notificationsSection
-                    appSection
-                }
-                .padding(16)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                displaySection
+                shiftSection
+                notificationsSection
+                appSection
             }
+            .padding(16)
         }
-        .frame(width: 420)
-        .frame(maxHeight: 560)
         .onAppear {
             controller.refreshNotificationAuthorizationStatus()
         }
         .onDisappear {
             setHotkeyRecording(false)
         }
-    }
-
-    private var titleBar: some View {
-        Text("Settings")
-            .font(.system(size: 14, weight: .semibold))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .frame(height: 46)
-            .background(.regularMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(ChromeColor.border)
-                    .frame(height: 1)
-            }
     }
 
     private var displaySection: some View {
