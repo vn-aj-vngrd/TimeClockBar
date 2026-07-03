@@ -15,9 +15,8 @@ For UI, WebKit, notification, hotkey, launch-at-login, or menu-bar behavior, als
 ## Manual Regression Areas
 
 - Menu-bar title and tooltip updates.
-- Popover open, close, refresh, and page toggle behavior.
+- Popover open, close, refresh, page toggle, and fixed shortcut behavior.
 - Settings persistence after app restart.
 - Reminder scheduling and notification actions.
 - Global hotkey registration and recording.
 - Polling pause and resume across offline, sleep, and wake states.
-

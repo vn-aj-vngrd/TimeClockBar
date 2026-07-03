@@ -34,6 +34,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var isRecordingHotkey = false
     @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published var isSettingsPresented = false
+    @Published private(set) var requestedPopoverPage: PopoverPage?
 
     private var pollTimer: Timer?
     private var lastDetection: TimeclockDOMDetection?
@@ -140,6 +141,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         } else {
             dailyReportWebView.reload()
         }
+    }
+
+    func requestPopoverPage(_ page: PopoverPage?) {
+        requestedPopoverPage = page
     }
 
     func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
@@ -542,8 +547,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         hasSentLoginNotification = true
         TimeclockReminderScheduler.sendNotification(
             identifier: TimeclockReminderScheduler.loginRequiredNotificationIdentifier,
-            title: "TimeClock Bar login expired",
-            body: "Open TimeClock Bar to sign in again.",
+            title: "Time Clock Bar login expired",
+            body: "Open Time Clock Bar to sign in again.",
             categoryIdentifier: TimeclockReminderScheduler.loginRequiredCategoryIdentifier
         )
     }

@@ -248,18 +248,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         guard let button = statusItem?.button else { return }
 
         let menu = NSMenu()
-        menu.addItem(menuItem("Settings", #selector(openSettingsFromMenu)))
-        menu.addItem(menuItem("Refresh", #selector(refreshFromMenu)))
-        menu.addItem(menuItem("Open TimeClock Bar in Browser", #selector(openTimeclockFromMenu)))
-        menu.addItem(menuItem("Open Daily Report in Browser", #selector(openDailyReportFromMenu)))
+        menu.addItem(menuItem("Settings", #selector(openSettingsFromMenu), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(menuItem("Quit", #selector(quitFromMenu)))
+        menu.addItem(menuItem("Open Time Clock Bar", #selector(openTimeclockInAppFromMenu), keyEquivalent: "1"))
+        menu.addItem(menuItem("Open Daily Report", #selector(openDailyReportInAppFromMenu), keyEquivalent: "2"))
+        menu.addItem(.separator())
+        menu.addItem(menuItem("Open Time Clock in Browser", #selector(openTimeclockFromMenu), keyEquivalent: "1", modifiers: [.command, .option]))
+        menu.addItem(menuItem("Open Daily Report in Browser", #selector(openDailyReportFromMenu), keyEquivalent: "2", modifiers: [.command, .option]))
+        menu.addItem(.separator())
+        menu.addItem(menuItem("Refresh", #selector(refreshFromMenu), keyEquivalent: "r"))
+        menu.addItem(.separator())
+        menu.addItem(menuItem("Quit", #selector(quitFromMenu), keyEquivalent: "q"))
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
     }
 
-    private func menuItem(_ title: String, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+    private func menuItem(
+        _ title: String,
+        _ action: Selector,
+        keyEquivalent: String = "",
+        modifiers: NSEvent.ModifierFlags = .command
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: controller.hotkeyEnabled ? keyEquivalent : "")
         item.target = self
+        item.keyEquivalentModifierMask = modifiers
         return item
     }
 
@@ -273,6 +284,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
     @objc private func refreshFromMenu() {
         controller.reload()
+    }
+
+    @objc private func openTimeclockInAppFromMenu() {
+        showPopover(page: .timeclock)
+    }
+
+    @objc private func openDailyReportInAppFromMenu() {
+        showPopover(page: .dailyReport)
     }
 
     @objc private func openTimeclockFromMenu() {
@@ -289,6 +308,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
 
     private func openBrowser(url: URL) {
         NSWorkspace.shared.open(url)
+    }
+
+    private func showPopover(page: PopoverPage) {
+        showPopover()
+        controller.requestPopoverPage(page)
     }
 
     private static func brandStatusImage() -> NSImage? {

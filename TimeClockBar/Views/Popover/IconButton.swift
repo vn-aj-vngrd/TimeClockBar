@@ -3,13 +3,15 @@ import SwiftUI
 struct IconButton: View {
     let title: String
     let systemImage: String
+    let shortcut: String?
     let showsBackground: Bool
     let action: () -> Void
     @State private var isHovered = false
 
-    init(_ title: String, systemImage: String, showsBackground: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, systemImage: String, shortcut: String? = nil, showsBackground: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
+        self.shortcut = shortcut
         self.showsBackground = showsBackground
         self.action = action
     }
@@ -25,7 +27,7 @@ struct IconButton: View {
         .foregroundStyle(isHovered ? ChromeColor.primaryText : ChromeColor.secondaryText)
         .background(isHovered ? ChromeColor.controlHover : showsBackground ? ChromeColor.controlGroup : .clear)
         .clipShape(Circle())
-        .help(title)
+        .help(shortcut.map { "\(title) \($0)" } ?? title)
         .onHover { isHovered = $0 }
     }
 }

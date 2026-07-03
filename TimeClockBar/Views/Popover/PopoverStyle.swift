@@ -11,7 +11,7 @@ enum ChromeColor {
     static let sectionRing = Color.white.opacity(0.075)
 }
 
-enum PopoverPage {
+enum PopoverPage: Equatable {
     case timeclock
     case dailyReport
     case settings

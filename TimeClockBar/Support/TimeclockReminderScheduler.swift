@@ -95,7 +95,7 @@ enum TimeclockReminderScheduler {
     static func registerNotificationCategories() {
         let openTimeclock = UNNotificationAction(
             identifier: openTimeclockActionIdentifier,
-            title: "Open TimeClock Bar",
+            title: "Open Time Clock Bar",
             options: [.foreground]
         )
         let openReport = UNNotificationAction(
