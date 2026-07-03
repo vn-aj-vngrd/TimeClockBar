@@ -5,6 +5,7 @@ import UserNotifications
 struct SettingsPopover: View {
     @ObservedObject var controller: TimeclockController
     @Binding var isRecordingHotkey: Bool
+    @State private var isResetAllConfirmationPresented = false
 
     let quit: () -> Void
 
@@ -26,6 +27,19 @@ struct SettingsPopover: View {
         }
         .onDisappear {
             setHotkeyRecording(false)
+        }
+        .confirmationDialog(
+            "Reset all defaults?",
+            isPresented: $isResetAllConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Reset All Defaults", role: .destructive) {
+                controller.resetAllDefaults()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This restores display, shift, notification, shortcut, and app settings.")
         }
     }
 
@@ -133,7 +147,7 @@ struct SettingsPopover: View {
             PreferenceRow("Defaults") {
                 Button("Reset All") {
                     setHotkeyRecording(false)
-                    controller.resetAllDefaults()
+                    isResetAllConfirmationPresented = true
                 }
                 .controlSize(.small)
             }

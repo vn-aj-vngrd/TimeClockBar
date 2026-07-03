@@ -96,7 +96,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         breakDurationMinutes = Self.savedDurationMinutes(Self.breakDurationMinutesDefaultsKey, defaultValue: 60)
         workReminderEnabled = Self.savedBool(Self.workReminderEnabledDefaultsKey, defaultValue: true)
         workReminderLeadMinutes = Self.savedMinutes(Self.workReminderLeadMinutesDefaultsKey, defaultValue: 15)
-        breakReminderEnabled = Self.savedBool(Self.breakReminderEnabledDefaultsKey, defaultValue: false)
+        breakReminderEnabled = Self.savedBool(Self.breakReminderEnabledDefaultsKey, defaultValue: true)
         breakReminderMinutes = Self.savedMinutes(Self.breakReminderMinutesDefaultsKey, defaultValue: 19 * 60)
         breakOverReminderEnabled = Self.savedBool(Self.breakOverReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderEnabled = Self.savedBool(Self.clockOutReminderEnabledDefaultsKey, defaultValue: true)
@@ -372,7 +372,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         breakDurationMinutes = 60
         workReminderEnabled = true
         workReminderLeadMinutes = 15
-        breakReminderEnabled = false
+        breakReminderEnabled = true
         breakReminderMinutes = 19 * 60
         breakOverReminderEnabled = true
         clockOutReminderEnabled = true
