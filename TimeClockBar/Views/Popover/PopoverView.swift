@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WebKit
 
@@ -26,6 +27,20 @@ struct PopoverView: View {
                 closeSettings()
             }
         }
+        .onChange(of: controller.requestedPopoverPage) { _, requestedPage in
+            guard let requestedPage else { return }
+
+            show(page: requestedPage)
+            controller.requestPopoverPage(nil)
+        }
+        .background {
+            PopoverShortcutCaptureView(isEnabled: controller.hotkeyEnabled && !isRecordingHotkey) { event in
+                handleShortcut(event)
+            }
+            .frame(width: 1, height: 1)
+            .opacity(0.01)
+            .allowsHitTesting(false)
+        }
     }
 
     private var header: some View {
@@ -43,15 +58,15 @@ struct PopoverView: View {
                     }
                 } else {
                     HStack(spacing: 2) {
-                        IconButton("Settings", systemImage: "gearshape") {
+                        IconButton("Settings", systemImage: "gearshape", shortcut: shortcutLabel("⌘,")) {
                             showSettings()
                         }
 
-                        IconButton("Refresh", systemImage: "arrow.clockwise") {
+                        IconButton("Refresh", systemImage: "arrow.clockwise", shortcut: shortcutLabel("⌘R")) {
                             refresh()
                         }
 
-                        IconButton("Open Browser", systemImage: "arrow.up.right.square") {
+                        IconButton("Open Browser", systemImage: "arrow.up.right.square", shortcut: shortcutLabel("⌘O")) {
                             openBrowser(currentURL)
                         }
                     }
@@ -82,21 +97,13 @@ struct PopoverView: View {
 
     private var pageToggleButton: some View {
         Button {
-            switch page {
-            case .timeclock:
-                controller.loadDailyReport()
-                page = .dailyReport
-            case .dailyReport:
-                page = .timeclock
-            case .settings:
-                closeSettings()
-            }
+            togglePage()
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: page == .timeclock ? "doc.text.fill" : "clock.fill")
                     .font(.system(size: 12, weight: .bold))
 
-                Text(page == .timeclock ? "Report" : "Clock")
+                Text(page == .timeclock ? "Report" : "Time Clock")
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(ChromeColor.primaryText)
@@ -110,7 +117,7 @@ struct PopoverView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(page == .timeclock ? "Open daily report" : "Back to TimeClock Bar")
+        .help(page == .timeclock ? shortcutHelp("Report", "⌘2") : shortcutHelp("Time Clock", "⌘1"))
         .onHover { isReportHovered = $0 }
     }
 
@@ -163,6 +170,14 @@ struct PopoverView: View {
         }
     }
 
+    private func shortcutLabel(_ label: String) -> String? {
+        controller.hotkeyEnabled ? label : nil
+    }
+
+    private func shortcutHelp(_ title: String, _ label: String) -> String {
+        shortcutLabel(label).map { "\(title) \($0)" } ?? title
+    }
+
     private func showSettings() {
         if page != .settings {
             pageBeforeSettings = page
@@ -175,6 +190,131 @@ struct PopoverView: View {
     private func closeSettings() {
         page = pageBeforeSettings == .settings ? .timeclock : pageBeforeSettings
         controller.isSettingsPresented = false
+    }
+
+    private func togglePage() {
+        switch page {
+        case .timeclock:
+            showDailyReport()
+        case .dailyReport:
+            showTimeclock()
+        case .settings:
+            closeSettings()
+        }
+    }
+
+    private func show(page: PopoverPage) {
+        switch page {
+        case .timeclock:
+            showTimeclock()
+        case .dailyReport:
+            showDailyReport()
+        case .settings:
+            showSettings()
+        }
+    }
+
+    private func showTimeclock() {
+        page = .timeclock
+        controller.isSettingsPresented = false
+    }
+
+    private func showDailyReport() {
+        controller.loadDailyReport()
+        page = .dailyReport
+        controller.isSettingsPresented = false
+    }
+
+    private func handleShortcut(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+
+        if modifiers == [.command, .option] {
+            switch key {
+            case "1":
+                openBrowser(controller.url)
+            case "2":
+                openBrowser(controller.dailyReportURL)
+            default:
+                return false
+            }
+
+            return true
+        }
+
+        guard modifiers == .command else { return false }
+
+        switch key {
+        case ",":
+            showSettings()
+        case "1":
+            showTimeclock()
+        case "2":
+            showDailyReport()
+        case "r":
+            refresh()
+        case "o":
+            openBrowser(currentURL)
+        case "q":
+            quit()
+        default:
+            return false
+        }
+
+        return true
+    }
+}
+
+private struct PopoverShortcutCaptureView: NSViewRepresentable {
+    let isEnabled: Bool
+    let onKeyDown: (NSEvent) -> Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.installMonitor()
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.onKeyDown = onKeyDown
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    final class Coordinator {
+        var isEnabled = true
+        var onKeyDown: (NSEvent) -> Bool = { _ in false }
+        private var monitor: Any?
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.isEnabled, self.onKeyDown(event) else {
+                    return event
+                }
+
+                return nil
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
     }
 }
 

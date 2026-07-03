@@ -1,6 +1,6 @@
 # Architecture
 
-TimeClockBar is a single-target macOS SwiftUI app with AppKit integration for menu-bar behavior.
+Time Clock Bar is a single-target macOS SwiftUI app with AppKit integration for menu-bar behavior.
 
 ## Main Flow
 
@@ -10,7 +10,7 @@ TimeClockBar is a single-target macOS SwiftUI app with AppKit integration for me
 - `Support/TimeclockDOMDetector.swift` owns the JavaScript extraction contract and DOM detection payload.
 - `Support/TimeclockReminderScheduler.swift` owns notification categories, reminder scheduling, snooze/test notifications, and legacy reminder cleanup.
 - `Support/HotkeyFormatting.swift` owns keyboard shortcut labels.
-- `Views/Popover/PopoverView.swift` renders the popover chrome, embedded pages, page switching, and settings popover entry point.
+- `Views/Popover/PopoverView.swift` renders the popover chrome, embedded pages, page switching, fixed popover shortcuts, and settings popover entry point.
 - `Views/Popover/SettingsPopover.swift` renders settings UI and binds preferences into `TimeclockController`.
 - `Views/Popover/PreferenceRows.swift`, `HotkeyRecorderButton.swift`, `IconButton.swift`, and `PopoverStyle.swift` contain focused popover UI components and styling.
 - `Views/Web/WebView.swift` wraps a shared `WKWebView` for SwiftUI.
@@ -22,7 +22,7 @@ Runtime state is exposed from `TimeclockController` with `@Published` properties
 
 ## External Integrations
 
-- WebKit loads the timeclock and daily report pages.
+- WebKit loads the time clock and daily report pages.
 - UserNotifications schedules local reminders and action buttons.
 - ServiceManagement controls launch at login.
 - Carbon registers the global hotkey.

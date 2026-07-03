@@ -14,6 +14,7 @@ struct SettingsPopover: View {
                 displaySection
                 shiftSection
                 notificationsSection
+                shortcutsSection
                 appSection
             }
             .padding(16)
@@ -116,11 +117,6 @@ struct SettingsPopover: View {
     private var appSection: some View {
         PreferenceSection("App") {
             PreferenceToggleRow("Launch at Login", isOn: launchAtLoginBinding)
-            PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
-
-            if controller.hotkeyEnabled {
-                hotkeyRow
-            }
 
             PreferenceRow("Defaults") {
                 Button("Reset All") {
@@ -133,6 +129,24 @@ struct SettingsPopover: View {
             PreferenceRow("Quit App") {
                 Button("Quit", action: quit)
                     .controlSize(.small)
+            }
+        }
+    }
+
+    private var shortcutsSection: some View {
+        PreferenceSection("Shortcuts") {
+            PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
+
+            if controller.hotkeyEnabled {
+                hotkeyRow
+                ShortcutRow("Settings", shortcut: "⌘,")
+                ShortcutRow("Time Clock", shortcut: "⌘1")
+                ShortcutRow("Report", shortcut: "⌘2")
+                ShortcutRow("Refresh", shortcut: "⌘R")
+                ShortcutRow("Open Current Page", shortcut: "⌘O")
+                ShortcutRow("Open Time Clock in Browser", shortcut: "⌥⌘1")
+                ShortcutRow("Open Report in Browser", shortcut: "⌥⌘2")
+                ShortcutRow("Quit App", shortcut: "⌘Q")
             }
         }
     }
@@ -339,5 +353,30 @@ struct SettingsPopover: View {
     private func setHotkeyRecording(_ isRecording: Bool) {
         isRecordingHotkey = isRecording
         controller.setHotkeyRecording(isRecording)
+    }
+}
+
+private struct ShortcutRow: View {
+    let title: String
+    let shortcut: String
+
+    init(_ title: String, shortcut: String) {
+        self.title = title
+        self.shortcut = shortcut
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(ChromeColor.secondaryText)
+
+            Spacer(minLength: 12)
+
+            Text(shortcut)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(ChromeColor.secondaryText)
+        }
+        .frame(maxWidth: .infinity, minHeight: 24)
     }
 }
