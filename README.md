@@ -23,6 +23,12 @@ Build from the command line:
 xcodebuild -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug build
 ```
 
+Run tests from the command line:
+
+```sh
+xcodebuild test -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug -destination 'platform=macOS'
+```
+
 There is no separate package manager, backend service, database, or web build step in this repository.
 
 ## Source Layout

@@ -19,6 +19,8 @@ struct SettingsPopover: View {
             }
             .padding(16)
         }
+        .scrollContentBackground(.hidden)
+        .background(ChromeColor.controlGroup)
         .onAppear {
             controller.refreshNotificationAuthorizationStatus()
         }

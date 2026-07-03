@@ -1,6 +1,15 @@
 import Foundation
 import UserNotifications
 
+struct TimeclockReminderPlan: Equatable {
+    let identifier: String
+    let title: String
+    let body: String
+    let minutes: Int
+    let weekday: Int
+    let categoryIdentifier: String
+}
+
 enum TimeclockReminderScheduler {
     static let loginRequiredNotificationIdentifier = "login-required"
     static let openTimeclockActionIdentifier = "open-timeclock"
@@ -47,48 +56,93 @@ enum TimeclockReminderScheduler {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, _ in
             guard isAllowed else { return }
 
-            for weekday in workingWeekdays {
-                if workReminderEnabled && !isWorking(state: state) {
-                    let reminderMinutes = workStartMinutes - workReminderLeadMinutes
-
-                    scheduleWeeklyNotification(
-                        identifier: notificationIdentifier(prefix: workReminderIdentifier, weekday: weekday),
-                        title: "Shift starts soon",
-                        body: "Your work shift starts in \(workReminderLeadMinutes) minutes.",
-                        minutes: reminderMinutes,
-                        weekday: shiftedWeekday(weekday, byDays: dayOffset(forMinutes: reminderMinutes)),
-                        categoryIdentifier: reminderCategoryIdentifier
-                    )
-                }
-
-                if breakReminderEnabled && !isOnBreak(state: state) {
-                    scheduleWeeklyNotification(
-                        identifier: notificationIdentifier(prefix: breakReminderIdentifier, weekday: weekday),
-                        title: "Break reminder",
-                        body: "Time for your preferred break.",
-                        minutes: breakReminderMinutes,
-                        weekday: weekday,
-                        categoryIdentifier: reminderCategoryIdentifier
-                    )
-                }
-
-                if clockOutReminderEnabled && !isClockedOut(state: state) {
-                    let reminderMinutes = workEndMinutes - clockOutReminderLeadMinutes
-                    let endWeekday = shiftedWeekday(
-                        weekday,
-                        byDays: (workEndMinutes <= workStartMinutes ? 1 : 0) + dayOffset(forMinutes: reminderMinutes)
-                    )
-
-                    scheduleWeeklyNotification(
-                        identifier: notificationIdentifier(prefix: clockOutReminderIdentifier, weekday: weekday),
-                        title: "Clock out reminder",
-                        body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
-                        minutes: reminderMinutes,
-                        weekday: endWeekday,
-                        categoryIdentifier: reportReminderCategoryIdentifier
-                    )
-                }
+            for plan in plans(
+                state: state,
+                workingWeekdays: workingWeekdays,
+                workReminderEnabled: workReminderEnabled,
+                workStartMinutes: workStartMinutes,
+                workReminderLeadMinutes: workReminderLeadMinutes,
+                breakReminderEnabled: breakReminderEnabled,
+                breakReminderMinutes: breakReminderMinutes,
+                clockOutReminderEnabled: clockOutReminderEnabled,
+                workEndMinutes: workEndMinutes,
+                clockOutReminderLeadMinutes: clockOutReminderLeadMinutes
+            ) {
+                scheduleWeeklyNotification(
+                    identifier: plan.identifier,
+                    title: plan.title,
+                    body: plan.body,
+                    minutes: plan.minutes,
+                    weekday: plan.weekday,
+                    categoryIdentifier: plan.categoryIdentifier
+                )
             }
+        }
+    }
+
+    static func plans(
+        state: TimeclockState,
+        workingWeekdays: Set<Int>,
+        workReminderEnabled: Bool,
+        workStartMinutes: Int,
+        workReminderLeadMinutes: Int,
+        breakReminderEnabled: Bool,
+        breakReminderMinutes: Int,
+        clockOutReminderEnabled: Bool,
+        workEndMinutes: Int,
+        clockOutReminderLeadMinutes: Int
+    ) -> [TimeclockReminderPlan] {
+        guard !workingWeekdays.isEmpty,
+              workReminderEnabled || breakReminderEnabled || clockOutReminderEnabled else { return [] }
+
+        return workingWeekdays.sorted().flatMap { weekday in
+            var plans: [TimeclockReminderPlan] = []
+
+            if workReminderEnabled && !isWorking(state: state) {
+                let reminderMinutes = workStartMinutes - workReminderLeadMinutes
+
+                plans.append(TimeclockReminderPlan(
+                    identifier: notificationIdentifier(prefix: workReminderIdentifier, weekday: weekday),
+                    title: "Shift starts soon",
+                    body: "Your work shift starts in \(workReminderLeadMinutes) minutes.",
+                    minutes: reminderMinutes,
+                    weekday: TimeclockTimeMath.shiftedWeekday(
+                        weekday,
+                        byDays: TimeclockTimeMath.dayOffset(forMinutes: reminderMinutes)
+                    ),
+                    categoryIdentifier: reminderCategoryIdentifier
+                ))
+            }
+
+            if breakReminderEnabled && !isOnBreak(state: state) {
+                plans.append(TimeclockReminderPlan(
+                    identifier: notificationIdentifier(prefix: breakReminderIdentifier, weekday: weekday),
+                    title: "Break reminder",
+                    body: "Time for your preferred break.",
+                    minutes: breakReminderMinutes,
+                    weekday: weekday,
+                    categoryIdentifier: reminderCategoryIdentifier
+                ))
+            }
+
+            if clockOutReminderEnabled && !isClockedOut(state: state) {
+                let reminderMinutes = workEndMinutes - clockOutReminderLeadMinutes
+                let endWeekday = TimeclockTimeMath.shiftedWeekday(
+                    weekday,
+                    byDays: (workEndMinutes <= workStartMinutes ? 1 : 0) + TimeclockTimeMath.dayOffset(forMinutes: reminderMinutes)
+                )
+
+                plans.append(TimeclockReminderPlan(
+                    identifier: notificationIdentifier(prefix: clockOutReminderIdentifier, weekday: weekday),
+                    title: "Clock out reminder",
+                    body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
+                    minutes: reminderMinutes,
+                    weekday: endWeekday,
+                    categoryIdentifier: reportReminderCategoryIdentifier
+                ))
+            }
+
+            return plans
         }
     }
 
@@ -154,7 +208,7 @@ enum TimeclockReminderScheduler {
     }
 
     private static func scheduleWeeklyNotification(identifier: String, title: String, body: String, minutes: Int, weekday: Int, categoryIdentifier: String) {
-        let normalized = normalizedMinutes(minutes)
+        let normalized = TimeclockTimeMath.normalizedMinutes(minutes)
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -175,26 +229,6 @@ enum TimeclockReminderScheduler {
 
     private static func notificationIdentifier(prefix: String, weekday: Int) -> String {
         "\(prefix)-\(weekday)"
-    }
-
-    private static func normalizedMinutes(_ minutes: Int) -> Int {
-        ((minutes % 1440) + 1440) % 1440
-    }
-
-    private static func dayOffset(forMinutes minutes: Int) -> Int {
-        if minutes < 0 {
-            return -1
-        }
-
-        if minutes >= 1440 {
-            return 1
-        }
-
-        return 0
-    }
-
-    private static func shiftedWeekday(_ weekday: Int, byDays offset: Int) -> Int {
-        ((weekday - 1 + offset + 7) % 7) + 1
     }
 
     private static func isWorking(state: TimeclockState) -> Bool {

@@ -1,10 +1,18 @@
 # Testing
 
-There is no dedicated test target yet. For behavior changes, prefer adding the smallest useful test target or isolated check if the logic can be tested without driving the app UI.
+The project has a hosted macOS XCTest bundle named `TimeClockBarTests`.
+
+Automated tests cover deterministic Swift behavior, reminder planning, menu-title formatting, hotkey labels, timer math, and local WebKit DOM detection with inline HTML. Platform service flows still need manual verification because they depend on macOS services, live WebKit state, notification permissions, global hotkeys, launch-at-login, network state, and sleep/wake behavior.
 
 ## Required Checks
 
-For most changes, run:
+Run the automated test suite:
+
+```sh
+xcodebuild test -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug -destination 'platform=macOS'
+```
+
+For build-only checks, run:
 
 ```sh
 xcodebuild -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug build
@@ -15,8 +23,10 @@ For UI, WebKit, notification, hotkey, launch-at-login, or menu-bar behavior, als
 ## Manual Regression Areas
 
 - Menu-bar title and tooltip updates.
-- Right-click menu actions and About window metadata/link.
-- Popover open, close, refresh, page toggle, and fixed shortcut behavior.
+- Left-click popover open and close.
+- Right-click menu actions.
+- About window opens once, focuses on repeat open, and shows current bundle metadata/link text.
+- Popover refresh, page toggle, in-app Time Clock/Daily Report menu actions, and fixed shortcut behavior.
 - Settings persistence after app restart.
 - Reminder scheduling and notification actions.
 - Global hotkey registration and recording.

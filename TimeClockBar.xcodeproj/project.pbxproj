@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		DF5D32372FF81000003D5A62 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DF5D320F2FF7D882003D5A62 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DF5D32162FF7D882003D5A62;
+			remoteInfo = TimeClockBar;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		DF5D32172FF7D882003D5A62 /* TimeClockBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = TimeClockBar.app; path = "Time Clock Bar.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF5D32302FF81000003D5A62 /* TimeClockBarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TimeClockBarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = TimeClockBar;
 			sourceTree = "<group>";
 		};
+		DF5D32312FF81000003D5A62 /* TimeClockBarTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TimeClockBarTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		DF5D32142FF7D882003D5A62 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF5D32322FF81000003D5A62 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				DF5D32192FF7D882003D5A62 /* TimeClockBar */,
+				DF5D32312FF81000003D5A62 /* TimeClockBarTests */,
 				DF5D32182FF7D882003D5A62 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				DF5D32172FF7D882003D5A62 /* TimeClockBar.app */,
+				DF5D32302FF81000003D5A62 /* TimeClockBarTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = DF5D32172FF7D882003D5A62 /* TimeClockBar.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DF5D32332FF81000003D5A62 /* TimeClockBarTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF5D32392FF81000003D5A62 /* Build configuration list for PBXNativeTarget "TimeClockBarTests" */;
+			buildPhases = (
+				DF5D32342FF81000003D5A62 /* Sources */,
+				DF5D32322FF81000003D5A62 /* Frameworks */,
+				DF5D32352FF81000003D5A62 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DF5D32382FF81000003D5A62 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DF5D32312FF81000003D5A62 /* TimeClockBarTests */,
+			);
+			name = TimeClockBarTests;
+			packageProductDependencies = (
+			);
+			productName = TimeClockBarTests;
+			productReference = DF5D32302FF81000003D5A62 /* TimeClockBarTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					DF5D32162FF7D882003D5A62 = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					DF5D32332FF81000003D5A62 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = DF5D32162FF7D882003D5A62;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				DF5D32162FF7D882003D5A62 /* TimeClockBar */,
+				DF5D32332FF81000003D5A62 /* TimeClockBarTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		DF5D32152FF7D882003D5A62 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF5D32352FF81000003D5A62 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DF5D32342FF81000003D5A62 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DF5D32382FF81000003D5A62 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DF5D32162FF7D882003D5A62 /* TimeClockBar */;
+			targetProxy = DF5D32372FF81000003D5A62 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		DF5D32202FF7D884003D5A62 /* Debug */ = {
@@ -311,6 +386,50 @@
 			};
 			name = Release;
 		};
+		DF5D323A2FF81000003D5A62 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vanajvanguardia.TimeClockBarTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Time Clock Bar.app/Contents/MacOS/Time Clock Bar";
+			};
+			name = Debug;
+		};
+		DF5D323B2FF81000003D5A62 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vanajvanguardia.TimeClockBarTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Time Clock Bar.app/Contents/MacOS/Time Clock Bar";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -328,6 +447,15 @@
 			buildConfigurations = (
 				DF5D32232FF7D884003D5A62 /* Debug */,
 				DF5D32242FF7D884003D5A62 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DF5D32392FF81000003D5A62 /* Build configuration list for PBXNativeTarget "TimeClockBarTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF5D323A2FF81000003D5A62 /* Debug */,
+				DF5D323B2FF81000003D5A62 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

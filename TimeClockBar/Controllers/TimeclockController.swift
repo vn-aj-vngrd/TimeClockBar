@@ -162,7 +162,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func setWorkStartMinutes(_ minutes: Int) {
-        workStartMinutes = Self.normalizedMinutes(minutes)
+        workStartMinutes = TimeclockTimeMath.normalizedMinutes(minutes)
         UserDefaults.standard.set(workStartMinutes, forKey: Self.workStartMinutesDefaultsKey)
         updateTodayProgressTitle()
         updateMenuBarTitle()
@@ -170,7 +170,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func setWorkEndMinutes(_ minutes: Int) {
-        workEndMinutes = Self.normalizedMinutes(minutes)
+        workEndMinutes = TimeclockTimeMath.normalizedMinutes(minutes)
         UserDefaults.standard.set(workEndMinutes, forKey: Self.workEndMinutesDefaultsKey)
         updateTodayProgressTitle()
         updateMenuBarTitle()
@@ -178,7 +178,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func setBreakDurationMinutes(_ minutes: Int) {
-        breakDurationMinutes = Self.normalizedDurationMinutes(minutes)
+        breakDurationMinutes = TimeclockTimeMath.normalizedDurationMinutes(minutes)
         UserDefaults.standard.set(breakDurationMinutes, forKey: Self.breakDurationMinutesDefaultsKey)
         updateTodayProgressTitle()
         updateMenuBarTitle()
@@ -203,7 +203,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func setBreakReminderMinutes(_ minutes: Int) {
-        breakReminderMinutes = Self.normalizedMinutes(minutes)
+        breakReminderMinutes = TimeclockTimeMath.normalizedMinutes(minutes)
         UserDefaults.standard.set(breakReminderMinutes, forKey: Self.breakReminderMinutesDefaultsKey)
         scheduleReminders()
     }
@@ -482,7 +482,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func updateMenuBarTitle() {
-        menuBarTitle = Self.menuBarTitle(
+        menuBarTitle = TimeclockMenuTitleFormatter.title(
             state: state,
             timers: timers,
             components: displayComponents,
@@ -492,11 +492,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func updateTodayProgressTitle() {
-        let parsedDayMinutes = Self.timerMinutes(from: timers.day.isEmpty ? timers.fallback : timers.day)
+        let parsedDayMinutes = TimeclockTimeMath.timerMinutes(from: timers.day.isEmpty ? timers.fallback : timers.day)
 
         guard workingWeekdays.contains(Calendar.current.component(.weekday, from: Date())) else {
             let dayMinutes = parsedDayMinutes ?? 0
-            todayProgressTitle = dayMinutes > 0 ? "Today +\(Self.durationLabel(minutes: dayMinutes))" : "Off today"
+            todayProgressTitle = dayMinutes > 0 ? "Today +\(TimeclockTimeMath.durationLabel(minutes: dayMinutes))" : "Off today"
             return
         }
 
@@ -505,13 +505,13 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return
         }
 
-        let targetMinutes = max(0, Self.shiftDurationMinutes(start: workStartMinutes, end: workEndMinutes) - breakDurationMinutes)
+        let targetMinutes = max(0, TimeclockTimeMath.shiftDurationMinutes(start: workStartMinutes, end: workEndMinutes) - breakDurationMinutes)
         let remainingMinutes = targetMinutes - dayMinutes
 
         if remainingMinutes > 0 {
-            todayProgressTitle = "Today \(Self.durationLabel(minutes: remainingMinutes)) left"
+            todayProgressTitle = "Today \(TimeclockTimeMath.durationLabel(minutes: remainingMinutes)) left"
         } else if remainingMinutes < 0 {
-            todayProgressTitle = "Today +\(Self.durationLabel(minutes: abs(remainingMinutes)))"
+            todayProgressTitle = "Today +\(TimeclockTimeMath.durationLabel(minutes: abs(remainingMinutes)))"
         } else {
             todayProgressTitle = "Today target met"
         }
@@ -573,11 +573,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private static func savedMinutes(_ key: String, defaultValue: Int) -> Int {
-        normalizedMinutes(UserDefaults.standard.object(forKey: key) as? Int ?? defaultValue)
+        TimeclockTimeMath.normalizedMinutes(UserDefaults.standard.object(forKey: key) as? Int ?? defaultValue)
     }
 
     private static func savedDurationMinutes(_ key: String, defaultValue: Int) -> Int {
-        normalizedDurationMinutes(UserDefaults.standard.object(forKey: key) as? Int ?? defaultValue)
+        TimeclockTimeMath.normalizedDurationMinutes(UserDefaults.standard.object(forKey: key) as? Int ?? defaultValue)
     }
 
     private static func savedWorkingWeekdays() -> Set<Int> {
@@ -618,81 +618,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             .map(\.rawValue)
     }
 
-    private static func menuBarTitle(
-        state: TimeclockState,
-        timers: TimeclockTimers,
-        components: Set<TimeclockDisplayComponent>,
-        remainingTitle: String,
-        showsLabels: Bool
-    ) -> String {
-        if state == .stale {
-            return state.menuBarTitle
-        }
-
-        let orderedComponents = TimeclockDisplayComponent.allCases.filter { components.contains($0) }
-        let timerComponentCount = orderedComponents.filter { $0 != .status && $0 != .remaining }.count
-        let parts = orderedComponents.compactMap { component -> String? in
-            switch component {
-            case .status:
-                return statusLabel(for: state)
-            case .remaining:
-                guard !remainingTitle.isEmpty else { return nil }
-                return showsLabels ? "\(component.label) \(remainingTitle)" : remainingTitle
-            case .current, .day, .week:
-                let value = timerComponentCount == 1 ? timers.value(for: component) : specificTimerValue(for: component, timers: timers)
-                guard !value.isEmpty else { return nil }
-
-                return showsLabels ? "\(component.label) \(value)" : value
-            }
-        }
-
-        guard !parts.isEmpty else { return state.menuBarTitle }
-
-        return parts.joined(separator: " · ")
-    }
-
-    private static func specificTimerValue(for component: TimeclockDisplayComponent, timers: TimeclockTimers) -> String {
-        switch component {
-        case .status:
-            return ""
-        case .current:
-            return timers.current
-        case .day:
-            return timers.day
-        case .week:
-            return timers.week
-        case .remaining:
-            return ""
-        }
-    }
-
-    private static func statusLabel(for state: TimeclockState) -> String {
-        switch state {
-        case .loading:
-            return "Loading"
-        case .loginRequired:
-            return "Login"
-        case .stale:
-            return "Stale"
-        case .clockedOut:
-            return "Out"
-        case .active:
-            return "Active"
-        case .onBreak:
-            return "Break"
-        case .unknown:
-            return "Unknown"
-        }
-    }
-
-    private static func normalizedMinutes(_ minutes: Int) -> Int {
-        ((minutes % 1440) + 1440) % 1440
-    }
-
-    private static func normalizedDurationMinutes(_ minutes: Int) -> Int {
-        min(max(minutes, 0), 24 * 60)
-    }
-
     private static func runningTimerValue(state: TimeclockState, timers: TimeclockTimers) -> String {
         switch state {
         case .active, .onBreak:
@@ -700,32 +625,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         case .loading, .loginRequired, .stale, .clockedOut, .unknown:
             return ""
         }
-    }
-
-    private static func timerMinutes(from value: String) -> Int? {
-        let parts = value.replacingOccurrences(of: ".", with: ":").split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2 else { return nil }
-        return parts[0] * 60 + parts[1]
-    }
-
-    private static func shiftDurationMinutes(start: Int, end: Int) -> Int {
-        let duration = normalizedMinutes(end - start)
-        return duration == 0 ? 24 * 60 : duration
-    }
-
-    private static func durationLabel(minutes: Int) -> String {
-        let hours = minutes / 60
-        let minutes = minutes % 60
-
-        if hours == 0 {
-            return "\(minutes)m"
-        }
-
-        if minutes == 0 {
-            return "\(hours)h"
-        }
-
-        return "\(hours)h \(minutes)m"
     }
 
     private static func makeConfiguration() -> WKWebViewConfiguration {
