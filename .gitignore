@@ -1,3 +1,5 @@
 *.xcuserstate
 xcuserdata/
 docs/superpowers
+build/
+dist/

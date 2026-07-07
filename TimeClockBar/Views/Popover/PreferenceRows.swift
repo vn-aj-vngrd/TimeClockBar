@@ -228,6 +228,7 @@ struct PreferenceMenuPicker<Value: Hashable>: View {
                 Text(selectedLabel)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(ChromeColor.primaryText)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .semibold))
@@ -238,7 +239,7 @@ struct PreferenceMenuPicker<Value: Hashable>: View {
             }
             .padding(.leading, 6)
             .padding(.trailing, 2)
-            .frame(height: 24)
+            .frame(minWidth: 78, minHeight: 24)
             .background(isHovered ? ChromeColor.selectHover : .clear)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
