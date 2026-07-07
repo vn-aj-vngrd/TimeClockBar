@@ -288,7 +288,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     func sendTestBreakOverReminder() {
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-break-over-reminder-\(UUID().uuidString)",
-            title: "Break over",
+            title: "Over break",
             body: "Time to end your break.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
         )

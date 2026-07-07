@@ -120,7 +120,7 @@ enum TimeclockReminderScheduler {
         if breakOverReminderEnabled && isOnBreak(state: state) {
             oneShotPlans.append(TimeclockReminderPlan(
                 identifier: breakOverReminderIdentifier,
-                title: "Break over",
+                title: "Over break",
                 body: "Time to end your break.",
                 minutes: breakDurationMinutes,
                 weekday: 0,

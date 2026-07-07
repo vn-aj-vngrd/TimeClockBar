@@ -32,7 +32,7 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
         let plan = try XCTUnwrap(plans.first)
 
         XCTAssertEqual(plans.map(\.identifier), ["break-over-reminder", "clock-out-reminder-2"])
-        XCTAssertEqual(plan.title, "Break over")
+        XCTAssertEqual(plan.title, "Over break")
         XCTAssertEqual(plan.body, "Time to end your break.")
         XCTAssertEqual(plan.categoryIdentifier, TimeclockReminderScheduler.reminderCategoryIdentifier)
         XCTAssertEqual(plan.minutes, 60)

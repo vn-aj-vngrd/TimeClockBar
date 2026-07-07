@@ -13,7 +13,13 @@ struct SettingsPopover: View {
         Form {
             displaySection
             shiftSection
-            notificationsSection
+            notificationPermissionSection
+            shiftStartNotificationSection
+            breakNotificationSection
+            shiftEndNotificationSection
+            #if DEBUG
+                notificationTestSection
+            #endif
             shortcutsSection
             appSection
         }
@@ -72,7 +78,7 @@ struct SettingsPopover: View {
         }
     }
 
-    private var notificationsSection: some View {
+    private var notificationPermissionSection: some View {
         PreferenceSection("Notifications") {
             PreferenceRow("Permission") {
                 HStack(spacing: 8) {
@@ -88,61 +94,82 @@ struct SettingsPopover: View {
                     }
                 }
             }
+            .lastPreferenceRow()
+        }
+    }
 
-            PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
-
+    private var shiftStartNotificationSection: some View {
+        PreferenceSection("Shift Start") {
             if controller.workReminderEnabled {
-                PreferenceRow("Before shift time") {
+                PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
+
+                PreferenceRow("Notify before") {
                     leadTimePicker(selection: workReminderLeadBinding)
                 }
+                .lastPreferenceRow()
+            } else {
+                PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
+                    .lastPreferenceRow()
             }
+        }
+    }
 
+    private var breakNotificationSection: some View {
+        PreferenceSection("Break") {
             PreferenceToggleRow("Break reminder", isOn: breakReminderEnabledBinding)
 
             if controller.breakReminderEnabled {
-                TimeRow("At", selection: breakReminderBinding)
+                TimeRow("Start break at", selection: breakReminderBinding)
             }
 
-            PreferenceToggleRow("Break over reminder", isOn: breakOverReminderEnabledBinding)
+            PreferenceToggleRow("Over break reminder", isOn: breakOverReminderEnabledBinding)
+                .lastPreferenceRow()
+        }
+    }
 
+    private var shiftEndNotificationSection: some View {
+        PreferenceSection("Shift End") {
             PreferenceToggleRow("Clock out reminder", isOn: clockOutReminderEnabledBinding)
 
             if controller.clockOutReminderEnabled {
-                PreferenceRow("Before clock out") {
+                PreferenceRow("Notify before") {
                     leadTimePicker(selection: clockOutReminderLeadBinding)
                 }
             }
 
-            #if DEBUG
-                PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
-
-                PreferenceRow("Test") {
-                    HStack(spacing: 6) {
-                        Button("Shift") {
-                            controller.sendTestShiftReminder()
-                        }
-                        Button("Break") {
-                            controller.sendTestBreakReminder()
-                        }
-                        Button("Over") {
-                            controller.sendTestBreakOverReminder()
-                        }
-                        Button("Clock Out") {
-                            controller.sendTestClockOutReminder()
-                        }
-                        Button("Overtime") {
-                            controller.sendTestOvertimeReminder()
-                        }
-                    }
-                    .buttonStyle(.settingsControl)
-                }
+            PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
                 .lastPreferenceRow()
-            #else
-                PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
-                    .lastPreferenceRow()
-            #endif
         }
     }
+
+    #if DEBUG
+        private var notificationTestSection: some View {
+            PreferenceSection("Notification Tests") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Send test")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(ChromeColor.primaryText)
+
+                    HStack(spacing: 6) {
+                        testNotificationButton("Shift", action: controller.sendTestShiftReminder)
+                        testNotificationButton("Break", action: controller.sendTestBreakReminder)
+                        testNotificationButton("Over Break", action: controller.sendTestBreakOverReminder)
+                    }
+
+                    HStack(spacing: 6) {
+                        testNotificationButton("Clock Out", action: controller.sendTestClockOutReminder)
+                        testNotificationButton("Overtime", action: controller.sendTestOvertimeReminder)
+                    }
+                }
+                .lastPreferenceRow()
+            }
+        }
+
+        private func testNotificationButton(_ title: String, action: @escaping () -> Void) -> some View {
+            Button(title, action: action)
+                .buttonStyle(.settingsControl)
+        }
+    #endif
 
     private var appSection: some View {
         PreferenceSection("App") {
