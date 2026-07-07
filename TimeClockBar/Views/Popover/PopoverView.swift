@@ -8,9 +8,11 @@ struct PopoverView: View {
     @State private var isRecordingHotkey = false
     @State private var page: PopoverPage = .timeclock
     @State private var pageBeforeSettings: PopoverPage = .timeclock
+    @State private var isClosingSettings = false
 
     let openBrowser: (URL) -> Void
     let openAbout: () -> Void
+    let resizeForSettings: (Bool) -> Void
     let quit: () -> Void
 
     var body: some View {
@@ -58,6 +60,8 @@ struct PopoverView: View {
                     IconButton("Back", systemImage: "chevron.left") {
                         closeSettings()
                     }
+                    .padding(3)
+                    .headerCircleContainer()
                 } else {
                     HStack(spacing: 2) {
                         IconButton("Settings", systemImage: "gearshape", shortcut: shortcutLabel("⌘,")) {
@@ -73,12 +77,7 @@ struct PopoverView: View {
                         }
                     }
                     .padding(3)
-                    .background(ChromeColor.controlGroup)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(ChromeColor.border, lineWidth: 1)
-                    )
+                    .headerCapsuleContainer()
                 }
 
                 Spacer()
@@ -87,6 +86,8 @@ struct PopoverView: View {
                     IconButton("About", systemImage: "info.circle") {
                         openAbout()
                     }
+                    .padding(3)
+                    .headerCircleContainer()
                 } else {
                     HStack(spacing: 8) {
                         statusChip
@@ -97,10 +98,14 @@ struct PopoverView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 50)
-        .background(alignment: .bottom) {
-            Rectangle()
-                .fill(ChromeColor.border)
-                .frame(height: 1)
+        .background {
+            ZStack(alignment: .bottom) {
+                ChromeColor.headerBackground
+
+                Rectangle()
+                    .fill(ChromeColor.border)
+                    .frame(height: 1)
+            }
         }
     }
 
@@ -112,12 +117,7 @@ struct PopoverView: View {
                 .foregroundStyle(ChromeColor.primaryText)
                 .padding(.horizontal, 8)
                 .frame(height: 24)
-                .background(ChromeColor.controlGroup)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(ChromeColor.border, lineWidth: 1)
-                )
+                .headerCapsuleContainer()
                 .help(title == "Offline" ? "Polling paused" : "Status stale")
         }
     }
@@ -145,15 +145,10 @@ struct PopoverView: View {
                 Text(page == .timeclock ? "Report" : "Time Clock")
                     .font(.system(size: 12, weight: .semibold))
             }
-            .foregroundStyle(ChromeColor.primaryText)
+            .foregroundStyle(ChromeColor.headerAction)
             .frame(height: 30)
             .padding(.horizontal, 12)
-            .background(isReportHovered ? ChromeColor.controlHover : ChromeColor.controlGroup)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(ChromeColor.border, lineWidth: 1)
-            )
+            .headerCapsuleContainer(isHovered: isReportHovered)
         }
         .buttonStyle(.plain)
         .help(page == .timeclock ? shortcutHelp("Report", "⌘2") : shortcutHelp("Time Clock", "⌘1"))
@@ -173,7 +168,16 @@ struct PopoverView: View {
                     .id(page)
             }
         }
+        .id(page)
+        .transition(contentTransition)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    private var contentTransition: AnyTransition {
+        isClosingSettings
+            ? .asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing))
+            : .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
     }
 
     private var currentWebView: WKWebView {
@@ -218,17 +222,24 @@ struct PopoverView: View {
     }
 
     private func showSettings() {
-        if page != .settings {
-            pageBeforeSettings = page
-        }
+        guard page != .settings else { return }
 
-        page = .settings
-        controller.isSettingsPresented = true
+        pageBeforeSettings = page
+        isClosingSettings = false
+        resizeForSettings(true)
+        withAnimation(.easeInOut(duration: 0.32)) {
+            page = .settings
+            controller.isSettingsPresented = true
+        }
     }
 
     private func closeSettings() {
-        page = pageBeforeSettings == .settings ? .timeclock : pageBeforeSettings
-        controller.isSettingsPresented = false
+        isClosingSettings = true
+        resizeForSettings(false)
+        withAnimation(.easeInOut(duration: 0.32)) {
+            page = pageBeforeSettings == .settings ? .timeclock : pageBeforeSettings
+            controller.isSettingsPresented = false
+        }
     }
 
     private func togglePage() {
@@ -256,12 +267,14 @@ struct PopoverView: View {
     private func showTimeclock() {
         page = .timeclock
         controller.isSettingsPresented = false
+        resizeForSettings(false)
     }
 
     private func showDailyReport() {
         controller.loadDailyReport()
         page = .dailyReport
         controller.isSettingsPresented = false
+        resizeForSettings(false)
     }
 
     private func handleShortcut(_ event: NSEvent) -> Bool {
@@ -357,11 +370,34 @@ private struct PopoverShortcutCaptureView: NSViewRepresentable {
     }
 }
 
+private extension View {
+    func headerCapsuleContainer(isHovered: Bool = false) -> some View {
+        background(isHovered ? ChromeColor.headerActionHover : ChromeColor.headerControlBackground)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(ChromeColor.headerControlStroke, lineWidth: 0.5)
+            )
+            .shadow(color: ChromeColor.headerControlShadow, radius: 8, x: 0, y: 2)
+    }
+
+    func headerCircleContainer() -> some View {
+        background(ChromeColor.headerControlBackground)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(ChromeColor.headerControlStroke, lineWidth: 0.5)
+            )
+            .shadow(color: ChromeColor.headerControlShadow, radius: 8, x: 0, y: 2)
+    }
+}
+
 #Preview {
     PopoverView(
         controller: TimeclockController(),
         openBrowser: { _ in },
         openAbout: {},
+        resizeForSettings: { _ in },
         quit: {}
     )
 }

@@ -17,6 +17,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var displayComponents: Set<TimeclockDisplayComponent>
     @Published private(set) var displayLabelsEnabled: Bool
     @Published private(set) var fsLogoEnabled: Bool
+    @Published private(set) var appTheme: TimeclockAppTheme
     @Published private(set) var launchAtLoginEnabled: Bool
     @Published private(set) var workStartMinutes: Int
     @Published private(set) var workEndMinutes: Int
@@ -52,6 +53,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let displayComponentsDefaultsKey = "timeclockDisplayComponents"
     private static let displayLabelsEnabledDefaultsKey = "displayLabelsEnabled"
     private static let fsLogoEnabledDefaultsKey = "fsLogoEnabled"
+    private static let appThemeDefaultsKey = "appTheme"
     private static let legacyDisplayMetricDefaultsKey = "timeclockDisplayMetric"
     private static let workStartMinutesDefaultsKey = "workStartMinutes"
     private static let workEndMinutesDefaultsKey = "workEndMinutes"
@@ -90,6 +92,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         displayComponents = Self.savedDisplayComponents()
         displayLabelsEnabled = Self.savedBool(Self.displayLabelsEnabledDefaultsKey, defaultValue: false)
         fsLogoEnabled = Self.savedBool(Self.fsLogoEnabledDefaultsKey, defaultValue: true)
+        appTheme = TimeclockAppTheme.saved(rawValue: UserDefaults.standard.string(forKey: Self.appThemeDefaultsKey))
         launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
         workStartMinutes = Self.savedMinutes(Self.workStartMinutesDefaultsKey, defaultValue: 15 * 60)
         workEndMinutes = Self.savedMinutes(Self.workEndMinutesDefaultsKey, defaultValue: 0)
@@ -97,7 +100,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workReminderEnabled = Self.savedBool(Self.workReminderEnabledDefaultsKey, defaultValue: true)
         workReminderLeadMinutes = Self.savedMinutes(Self.workReminderLeadMinutesDefaultsKey, defaultValue: 15)
         breakReminderEnabled = Self.savedBool(Self.breakReminderEnabledDefaultsKey, defaultValue: true)
-        breakReminderMinutes = Self.savedMinutes(Self.breakReminderMinutesDefaultsKey, defaultValue: 19 * 60)
+        breakReminderMinutes = Self.savedMinutes(Self.breakReminderMinutesDefaultsKey, defaultValue: 20 * 60)
         breakOverReminderEnabled = Self.savedBool(Self.breakOverReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderEnabled = Self.savedBool(Self.clockOutReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderLeadMinutes = Self.savedMinutes(Self.clockOutReminderLeadMinutesDefaultsKey, defaultValue: 15)
@@ -169,6 +172,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         }
 
         launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+    }
+
+    func setAppTheme(_ theme: TimeclockAppTheme) {
+        appTheme = theme
+        UserDefaults.standard.set(theme.rawValue, forKey: Self.appThemeDefaultsKey)
     }
 
     func setWorkStartMinutes(_ minutes: Int) {
@@ -373,12 +381,13 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workReminderEnabled = true
         workReminderLeadMinutes = 15
         breakReminderEnabled = true
-        breakReminderMinutes = 19 * 60
+        breakReminderMinutes = 20 * 60
         breakOverReminderEnabled = true
         clockOutReminderEnabled = true
         clockOutReminderLeadMinutes = 15
         overtimeReminderEnabled = true
         workingWeekdays = Self.defaultWorkingWeekdays
+        appTheme = .system
         isRecordingHotkey = false
         hotkeyEnabled = true
         hotkeyKeyCode = Self.defaultHotkeyKeyCode
@@ -399,6 +408,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UserDefaults.standard.set(clockOutReminderLeadMinutes, forKey: Self.clockOutReminderLeadMinutesDefaultsKey)
         UserDefaults.standard.set(overtimeReminderEnabled, forKey: Self.overtimeReminderEnabledDefaultsKey)
         UserDefaults.standard.set(Self.storedWorkingWeekdays(workingWeekdays), forKey: Self.workingWeekdaysDefaultsKey)
+        UserDefaults.standard.set(appTheme.rawValue, forKey: Self.appThemeDefaultsKey)
         UserDefaults.standard.set(hotkeyEnabled, forKey: Self.hotkeyEnabledDefaultsKey)
         UserDefaults.standard.set(Int(hotkeyKeyCode), forKey: Self.hotkeyKeyCodeDefaultsKey)
         UserDefaults.standard.set(Int(hotkeyModifierFlags.rawValue), forKey: Self.hotkeyModifiersDefaultsKey)

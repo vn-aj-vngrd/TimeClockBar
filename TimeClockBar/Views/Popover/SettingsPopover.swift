@@ -10,18 +10,16 @@ struct SettingsPopover: View {
     let quit: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                displaySection
-                shiftSection
-                notificationsSection
-                shortcutsSection
-                appSection
-            }
-            .padding(16)
+        Form {
+            displaySection
+            shiftSection
+            notificationsSection
+            shortcutsSection
+            appSection
         }
-        .scrollContentBackground(.hidden)
-        .background(ChromeColor.controlGroup)
+        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ChromeColor.settingsBackground)
         .onAppear {
             controller.refreshNotificationAuthorizationStatus()
         }
@@ -56,8 +54,9 @@ struct SettingsPopover: View {
                 Button("Reset") {
                     controller.resetDisplayDefaults()
                 }
-                .controlSize(.small)
+                .buttonStyle(.settingsControl)
             }
+            .lastPreferenceRow()
         }
     }
 
@@ -69,6 +68,7 @@ struct SettingsPopover: View {
             TimeRow("Start", selection: workStartBinding)
             TimeRow("End", selection: workEndBinding)
             DurationRow("Break", selection: breakDurationBinding)
+                .lastPreferenceRow()
         }
     }
 
@@ -77,14 +77,14 @@ struct SettingsPopover: View {
             PreferenceRow("Permission") {
                 HStack(spacing: 8) {
                     Text(notificationPermissionLabel)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(notificationPermissionEnabled ? ChromeColor.secondaryText : ChromeColor.primaryText)
 
                     if !notificationPermissionEnabled {
                         Button("Open") {
                             openNotificationSettings()
                         }
-                        .controlSize(.small)
+                        .buttonStyle(.settingsControl)
                     }
                 }
             }
@@ -113,9 +113,9 @@ struct SettingsPopover: View {
                 }
             }
 
-            PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
-
             #if DEBUG
+                PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
+
                 PreferenceRow("Test") {
                     HStack(spacing: 6) {
                         Button("Shift") {
@@ -134,14 +134,25 @@ struct SettingsPopover: View {
                             controller.sendTestOvertimeReminder()
                         }
                     }
-                    .controlSize(.small)
+                    .buttonStyle(.settingsControl)
                 }
+                .lastPreferenceRow()
+            #else
+                PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
+                    .lastPreferenceRow()
             #endif
         }
     }
 
     private var appSection: some View {
         PreferenceSection("App") {
+            PreferenceRow("Theme") {
+                PreferenceMenuPicker(
+                    selection: appThemeBinding,
+                    options: TimeclockAppTheme.allCases.map { (value: $0, label: $0.label) }
+                )
+            }
+
             PreferenceToggleRow("Launch at Login", isOn: launchAtLoginBinding)
 
             PreferenceRow("Defaults") {
@@ -149,21 +160,21 @@ struct SettingsPopover: View {
                     setHotkeyRecording(false)
                     isResetAllConfirmationPresented = true
                 }
-                .controlSize(.small)
+                .buttonStyle(.settingsControl)
             }
 
             PreferenceRow("Quit App") {
                 Button("Quit", action: quit)
-                    .controlSize(.small)
+                    .buttonStyle(.settingsControl)
             }
+            .lastPreferenceRow()
         }
     }
 
     private var shortcutsSection: some View {
         PreferenceSection("Shortcuts") {
-            PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
-
             if controller.hotkeyEnabled {
+                PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
                 hotkeyRow
                 ShortcutRow("Settings", shortcut: "⌘,")
                 ShortcutRow("Time Clock", shortcut: "⌘1")
@@ -173,6 +184,10 @@ struct SettingsPopover: View {
                 ShortcutRow("Open Time Clock in Browser", shortcut: "⌥⌘1")
                 ShortcutRow("Open Report in Browser", shortcut: "⌥⌘2")
                 ShortcutRow("Quit App", shortcut: "⌘Q")
+                    .lastPreferenceRow()
+            } else {
+                PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
+                    .lastPreferenceRow()
             }
         }
     }
@@ -181,8 +196,8 @@ struct SettingsPopover: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text("Toggle App")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ChromeColor.secondaryText)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(ChromeColor.primaryText)
                     .fixedSize(horizontal: true, vertical: false)
 
                 Spacer(minLength: 12)
@@ -199,7 +214,7 @@ struct SettingsPopover: View {
                         setHotkeyRecording(false)
                         controller.resetHotkeyDefaults()
                     }
-                    .controlSize(.small)
+                    .buttonStyle(.settingsControl)
                     .fixedSize(horizontal: true, vertical: false)
                 }
             }
@@ -219,6 +234,13 @@ struct SettingsPopover: View {
         Binding(
             get: { controller.launchAtLoginEnabled },
             set: { controller.setLaunchAtLoginEnabled($0) }
+        )
+    }
+
+    private var appThemeBinding: Binding<TimeclockAppTheme> {
+        Binding(
+            get: { controller.appTheme },
+            set: { controller.setAppTheme($0) }
         )
     }
 
@@ -380,14 +402,14 @@ struct SettingsPopover: View {
     }
 
     private func leadTimePicker(selection: Binding<Int>) -> some View {
-        Picker("", selection: selection) {
-            Text("15 min").tag(15)
-            Text("10 min").tag(10)
-            Text("5 min").tag(5)
-        }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .frame(width: 178)
+        PreferenceMenuPicker(
+            selection: selection,
+            options: [
+                (value: 15, label: "15 min"),
+                (value: 10, label: "10 min"),
+                (value: 5, label: "5 min")
+            ]
+        )
     }
 
     private func setHotkeyRecording(_ isRecording: Bool) {
@@ -408,15 +430,15 @@ private struct ShortcutRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ChromeColor.secondaryText)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(ChromeColor.primaryText)
 
             Spacer(minLength: 12)
 
             Text(shortcut)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 13, weight: .regular, design: .rounded))
                 .foregroundStyle(ChromeColor.secondaryText)
         }
-        .frame(maxWidth: .infinity, minHeight: 24)
+        .frame(maxWidth: .infinity)
     }
 }

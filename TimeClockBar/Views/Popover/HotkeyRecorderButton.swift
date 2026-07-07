@@ -12,7 +12,7 @@ struct HotkeyRecorderButton: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(isRecording ? recordingLabel : label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 12, weight: .regular, design: .rounded))
                 .foregroundStyle(isRecording ? ChromeColor.primaryText : ChromeColor.secondaryText)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(minWidth: 96, alignment: .trailing)
@@ -21,13 +21,13 @@ struct HotkeyRecorderButton: View {
                 Button("Clear") {
                     stopRecording()
                 }
-                .controlSize(.small)
+                .buttonStyle(.settingsControl)
                 .fixedSize(horizontal: true, vertical: false)
             } else {
                 Button("Change") {
                     startRecording()
                 }
-                .controlSize(.small)
+                .buttonStyle(.settingsControl)
                 .fixedSize(horizontal: true, vertical: false)
             }
         }

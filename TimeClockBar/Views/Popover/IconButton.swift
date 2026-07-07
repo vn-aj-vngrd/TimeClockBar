@@ -24,8 +24,8 @@ struct IconButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isHovered ? ChromeColor.primaryText : ChromeColor.secondaryText)
-        .background(isHovered ? ChromeColor.controlHover : showsBackground ? ChromeColor.controlGroup : .clear)
+        .foregroundStyle(ChromeColor.headerAction)
+        .background(isHovered ? ChromeColor.headerActionHover : showsBackground ? ChromeColor.headerControlBackground : .clear)
         .clipShape(Circle())
         .help(shortcut.map { "\(title) \($0)" } ?? title)
         .onHover { isHovered = $0 }

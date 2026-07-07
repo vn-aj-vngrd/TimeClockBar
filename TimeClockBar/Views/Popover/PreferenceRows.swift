@@ -17,8 +17,8 @@ struct WorkingDaysRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Working days")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ChromeColor.secondaryText)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(ChromeColor.primaryText)
 
             HStack(spacing: 4) {
                 ForEach(weekdays, id: \.weekday) { day in
@@ -28,22 +28,17 @@ struct WorkingDaysRow: View {
                         onChange(day.weekday, !isSelected)
                     } label: {
                         Text(day.label)
-                            .font(.system(size: 11, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 26)
+                            .font(.system(size: 12, weight: .regular))
+                            .frame(maxWidth: .infinity, minHeight: 24)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(isSelected ? ChromeColor.primaryText : ChromeColor.secondaryText)
+                    .foregroundStyle(isSelected ? ChromeColor.accentText : ChromeColor.primaryText)
                     .background(isSelected ? ChromeColor.reportBottom : ChromeColor.controlGroup)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(ChromeColor.sectionRing, lineWidth: 1)
-                    )
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
     }
 }
 
@@ -57,25 +52,13 @@ struct PreferenceSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        Section {
+            content
+        } header: {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ChromeColor.secondaryText)
-
-            VStack(alignment: .leading, spacing: 9) {
-                content
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(ChromeColor.sectionBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(ChromeColor.sectionRing, lineWidth: 1)
-            )
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ChromeColor.primaryText)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -91,14 +74,13 @@ struct PreferenceRow<Accessory: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ChromeColor.secondaryText)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(ChromeColor.primaryText)
 
             Spacer(minLength: 12)
 
             accessory
         }
-        .frame(minHeight: 32)
     }
 }
 
@@ -114,7 +96,7 @@ struct PreferenceToggleRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(ChromeColor.primaryText)
 
             Spacer(minLength: 12)
@@ -122,8 +104,9 @@ struct PreferenceToggleRow: View {
             Toggle(title, isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .controlSize(.small)
         }
-        .frame(maxWidth: .infinity, minHeight: 32)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -139,21 +122,23 @@ struct TimeRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ChromeColor.secondaryText)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(ChromeColor.primaryText)
 
             Spacer(minLength: 12)
 
-            Picker(title, selection: selection) {
-                ForEach(Array(stride(from: 0, to: 1440, by: 15)), id: \.self) { minutes in
-                    Text(Self.timeLabel(minutes: minutes)).tag(minutes)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 110)
+            PreferenceMenuPicker(
+                selection: selection,
+                options: Self.timeOptions
+            )
         }
-        .frame(maxWidth: .infinity, minHeight: 32)
+        .frame(maxWidth: .infinity)
+    }
+
+    private static var timeOptions: [(value: Int, label: String)] {
+        Array(stride(from: 0, to: 1440, by: 15)).map { minutes in
+            (value: minutes, label: timeLabel(minutes: minutes))
+        }
     }
 
     private static func timeLabel(minutes: Int) -> String {
@@ -177,21 +162,23 @@ struct DurationRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ChromeColor.secondaryText)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(ChromeColor.primaryText)
 
             Spacer(minLength: 12)
 
-            Picker(title, selection: selection) {
-                ForEach(Array(stride(from: 0, through: 240, by: 15)), id: \.self) { minutes in
-                    Text(Self.durationLabel(minutes: minutes)).tag(minutes)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 110)
+            PreferenceMenuPicker(
+                selection: selection,
+                options: Self.durationOptions
+            )
         }
-        .frame(maxWidth: .infinity, minHeight: 32)
+        .frame(maxWidth: .infinity)
+    }
+
+    private static var durationOptions: [(value: Int, label: String)] {
+        Array(stride(from: 0, through: 240, by: 15)).map { minutes in
+            (value: minutes, label: durationLabel(minutes: minutes))
+        }
     }
 
     private static func durationLabel(minutes: Int) -> String {
@@ -211,5 +198,75 @@ struct DurationRow: View {
         }
 
         return "\(hours)h \(minutes)m"
+    }
+}
+
+struct PreferenceMenuPicker<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, label: String)]
+    @State private var isHovered = false
+
+    private var selectedLabel: String {
+        options.first { $0.value == selection }?.label ?? ""
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.value) { option in
+                Button {
+                    selection = option.value
+                } label: {
+                    if option.value == selection {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedLabel)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(ChromeColor.primaryText)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(ChromeColor.secondaryText)
+                    .frame(width: 18, height: 18)
+                    .background(ChromeColor.selectChevronBackground)
+                    .clipShape(Circle())
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 2)
+            .frame(height: 24)
+            .background(isHovered ? ChromeColor.selectHover : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+extension View {
+    func lastPreferenceRow() -> some View {
+        listRowSeparator(.hidden, edges: .bottom)
+    }
+}
+
+struct SettingsControlButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .regular))
+            .foregroundStyle(ChromeColor.primaryText)
+            .padding(.horizontal, 9)
+            .frame(height: 22)
+            .background(configuration.isPressed ? ChromeColor.settingsButtonPressedBackground : ChromeColor.settingsButtonBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+}
+
+extension ButtonStyle where Self == SettingsControlButtonStyle {
+    static var settingsControl: SettingsControlButtonStyle {
+        SettingsControlButtonStyle()
     }
 }
