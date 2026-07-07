@@ -61,7 +61,7 @@ Version bump rules:
 
 - `BREAKING CHANGE` or `type!:` bumps major.
 - `feat:` bumps minor.
-- `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, and `revert:` bump patch.
+- `fix:` and `perf:` bump patch.
 - No matching conventional commits keeps the previous version.
 
 The bump rules live in `scripts/next-version.sh`.
@@ -72,7 +72,7 @@ The bump rules live in `scripts/next-version.sh`.
 make tag-version
 ```
 
-For shared releases, merge to `main`. GitHub Actions computes the version from commits, runs `make release`, creates the `v<version>` tag, and uploads the zip to the GitHub Release. The workflow can also be started manually from GitHub Actions when needed.
+For shared releases, run the `Release` workflow in GitHub Actions after the release changes are on `main`. It computes the version from commits, creates the `v<version>` tag, and uploads the zip to the GitHub Release.
 
 ## Development
 
@@ -125,7 +125,7 @@ There is no separate package manager, backend service, database, or web build st
 The repository includes two GitHub Actions workflows:
 
 - `CI` runs version checks and a Debug build on pushes to `main` and pull requests.
-- `Release` runs automatically on pushes to `main` and can also be started manually. It computes the next version from commits, builds the zip, creates the `v<version>` tag, and attaches the zip to a GitHub Release. If the computed version is already the latest tag, it skips the release.
+- `Release` is started manually from GitHub Actions. It computes the next version from commits, builds the zip, creates the `v<version>` tag, and attaches the zip to a GitHub Release. If the computed version is already the latest tag, it skips the release.
 
 Run `make test` locally before release changes. The app currently targets macOS 26.5, and GitHub-hosted macOS 26 runners can lag behind that OS version, which prevents hosted XCTest execution.
 

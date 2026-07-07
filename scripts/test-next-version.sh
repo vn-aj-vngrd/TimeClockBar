@@ -22,6 +22,12 @@ printf 'docs\n' > docs.txt
 git add .
 git commit -q -m "docs: Update README"
 actual="$("$repo_root/scripts/next-version.sh")"
+test "$actual" = "1.0" || { echo "expected 1.0, got $actual"; exit 1; }
+
+printf 'fix\n' > fix.txt
+git add .
+git commit -q -m "fix: Repair timer display"
+actual="$("$repo_root/scripts/next-version.sh")"
 test "$actual" = "1.0.1" || { echo "expected 1.0.1, got $actual"; exit 1; }
 
 git tag v1.0.1

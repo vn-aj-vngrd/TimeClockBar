@@ -24,7 +24,7 @@ if grep -Eq '(^BREAKING CHANGE:|^[[:alpha:]]+(\([^)]+\))?!:)' <<< "$commit_messa
   bump="major"
 elif grep -Eq '^feat(\([^)]+\))?: ' <<< "$subjects"; then
   bump="minor"
-elif grep -Eq '^(fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?: ' <<< "$subjects"; then
+elif grep -Eq '^(fix|perf)(\([^)]+\))?: ' <<< "$subjects"; then
   bump="patch"
 fi
 
