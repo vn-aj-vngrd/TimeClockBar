@@ -29,7 +29,7 @@ Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Cloc
 
 ## Install For Internal Use
 
-For a quick internal install, download or build `TimeClockBar-1.0-internal.zip`, unzip it, move `Time Clock Bar.app` to `/Applications`, then open it.
+For a quick internal install, download or build `TimeClockBar-<version>-internal.zip`, unzip it, move `Time Clock Bar.app` to `/Applications`, then open it.
 
 The current internal package is ad-hoc signed from the local Xcode project. macOS may show an unsigned/unverified developer warning when sharing the zip outside the build machine. For a company-wide release without that warning, package with an Apple Developer ID, enable hardened runtime, and notarize the app.
 
@@ -49,10 +49,27 @@ Build a Release app and zip it for internal sharing:
 make release
 ```
 
-The package is written to `dist/TimeClockBar-1.0-internal.zip`. To build a different package version name:
+The package is written to `dist/TimeClockBar-<version>-internal.zip`. The app version is computed from conventional commits since the latest `v*` git tag, and the build number is generated from the current git commit count.
+
+Check the current version info:
 
 ```sh
-make release VERSION=1.1
+make version
+```
+
+Version bump rules:
+
+- `BREAKING CHANGE` or `type!:` bumps major.
+- `feat:` bumps minor.
+- `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, and `revert:` bump patch.
+- No matching conventional commits keeps the previous version.
+
+The bump rules live in `scripts/next-version.sh`.
+
+`make release` runs the version checks, XCTest suite, package build, and signature verification. After accepting a release, tag it so the next version starts from that point:
+
+```sh
+make tag-version
 ```
 
 ## Development
@@ -86,15 +103,18 @@ There is no separate package manager, backend service, database, or web build st
 ## Make Commands
 
 - `make help` lists the available commands.
+- `make version` shows app, build, and git version info.
 - `make dev` opens the Xcode project.
 - `make build` builds the Debug app.
 - `make run` builds the Debug app and opens it.
 - `make test` runs the macOS XCTest suite.
+- `make test-version` runs the version script checks.
 - `make package` builds Release and creates the internal zip.
 - `make verify` validates the Release app code signature.
 - `make quit-local` quits the locally running app if needed.
 - `make install-local` builds Release, installs it to `~/Applications`, and opens it.
-- `make release` cleans, packages, and verifies the internal zip.
+- `make tag-version` tags the current commit as `v<version>`.
+- `make release` cleans, tests, packages, and verifies the internal zip.
 - `make clean` removes build artifacts.
 - `make distclean` removes build artifacts and packaged zips.
 
