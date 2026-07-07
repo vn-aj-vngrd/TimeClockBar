@@ -235,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
             return
         }
 
-        controller.reload()
+        controller.load()
         controller.startPolling()
     }
 
@@ -285,6 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         applyAppTheme(controller.appTheme)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         applyAppTheme(controller.appTheme)
+        controller.readTimeclockState()
     }
 
     private func resizePopoverForSettings(_ isSettingsPresented: Bool) {

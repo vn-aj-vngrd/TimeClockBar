@@ -78,7 +78,61 @@ final class TimeclockMenuTitleFormatterTests: XCTestCase {
                 remainingTitle: "Today 45m left",
                 showsLabels: true
             ),
-            "Break · Current 0:30 · Day 7:15 · Week 32:00 · Remaining Today 45m left"
+            "Break · Current 0:10 · Day 7:15 · Week 32:00 · Remaining Today 45m left"
+        )
+    }
+
+    func testCurrentUsesBreakTimeWhileOnBreak() {
+        XCTAssertEqual(
+            TimeclockMenuTitleFormatter.title(
+                state: .onBreak("0:10"),
+                timers: timers,
+                components: [.current],
+                remainingTitle: "",
+                showsLabels: false
+            ),
+            "0:10"
+        )
+    }
+
+    func testSingleVisibleTimerUsesBreakTimeWhileOnBreak() {
+        XCTAssertEqual(
+            TimeclockMenuTitleFormatter.title(
+                state: .onBreak("0:10"),
+                timers: timers,
+                components: [.status, .day],
+                remainingTitle: "",
+                showsLabels: false
+            ),
+            "Break · 0:10"
+        )
+    }
+
+    func testStatusOverrideReplacesStatusComponent() {
+        XCTAssertEqual(
+            TimeclockMenuTitleFormatter.title(
+                state: .onBreak("1:05"),
+                timers: timers,
+                components: [.status, .day],
+                remainingTitle: "",
+                statusOverride: "Over break",
+                showsLabels: false
+            ),
+            "Over break · 1:05"
+        )
+    }
+
+    func testStatusOverrideIsVisibleWithoutStatusComponent() {
+        XCTAssertEqual(
+            TimeclockMenuTitleFormatter.title(
+                state: .active("8:15"),
+                timers: timers,
+                components: [.day],
+                remainingTitle: "",
+                statusOverride: "Overtime",
+                showsLabels: false
+            ),
+            "Overtime · 7:15"
         )
     }
 

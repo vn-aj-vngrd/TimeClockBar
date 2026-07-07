@@ -71,6 +71,22 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(detection.currentTimer, "0:10")
     }
 
+    func testDetectsBreakTimerBeforeCurrentMetric() async throws {
+        let detection = try await detect(html: """
+        <main>
+            <button>End Break</button>
+            <p data-testid="timer">0:25</p>
+            <p>Current 00:00</p>
+            <p>Day 05:13</p>
+            <p>Week 13:24</p>
+        </main>
+        """)
+
+        XCTAssertEqual(detection.state, "onBreak")
+        XCTAssertEqual(detection.timer, "0:25")
+        XCTAssertEqual(detection.currentTimer, "00:00")
+    }
+
     func testDetectsMetricTimers() async throws {
         let detection = try await detect(html: "<main><p>Current 1:02</p><p>Day 7:30</p><p>Week 32:15</p><button>Clock Out</button></main>")
 

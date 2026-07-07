@@ -96,3 +96,45 @@ enum TimeclockState: Equatable {
         }
     }
 }
+
+enum TimeclockStatusIndicator: Equatable {
+    case none
+    case overtime
+    case overBreak
+
+    var title: String? {
+        switch self {
+        case .none:
+            return nil
+        case .overtime:
+            return "Overtime"
+        case .overBreak:
+            return "Over break"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .none:
+            return ""
+        case .overtime:
+            return "Over today's target"
+        case .overBreak:
+            return "Break is over the configured duration"
+        }
+    }
+
+    static func indicator(state: TimeclockState, breakDurationMinutes: Int, overtimeMinutes: Int) -> TimeclockStatusIndicator {
+        if case .onBreak(let time) = state,
+           let breakMinutes = TimeclockTimeMath.timerMinutes(from: time),
+           breakMinutes >= breakDurationMinutes {
+            return .overBreak
+        }
+
+        if case .active = state, overtimeMinutes > 0 {
+            return .overtime
+        }
+
+        return .none
+    }
+}

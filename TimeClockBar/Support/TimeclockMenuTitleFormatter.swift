@@ -6,6 +6,7 @@ enum TimeclockMenuTitleFormatter {
         timers: TimeclockTimers,
         components: Set<TimeclockDisplayComponent>,
         remainingTitle: String,
+        statusOverride: String? = nil,
         showsLabels: Bool
     ) -> String {
         if state == .stale {
@@ -14,15 +15,21 @@ enum TimeclockMenuTitleFormatter {
 
         let orderedComponents = TimeclockDisplayComponent.allCases.filter { components.contains($0) }
         let timerComponentCount = orderedComponents.filter { $0 != .status && $0 != .remaining }.count
-        let parts = orderedComponents.compactMap { component -> String? in
+        var parts = statusOverride != nil && !components.contains(.status) ? [statusOverride!] : []
+        parts += orderedComponents.compactMap { component -> String? in
             switch component {
             case .status:
-                return statusLabel(for: state)
+                return statusOverride ?? statusLabel(for: state)
             case .remaining:
                 guard !remainingTitle.isEmpty else { return nil }
                 return showsLabels ? "\(component.label) \(remainingTitle)" : remainingTitle
-            case .current, .day, .week:
-                let value = timerComponentCount == 1 ? timers.value(for: component) : specificTimerValue(for: component, timers: timers)
+            case .current:
+                let value = breakTime(for: state) ?? (timerComponentCount == 1 ? timers.value(for: component) : specificTimerValue(for: component, timers: timers))
+                guard !value.isEmpty else { return nil }
+
+                return showsLabels ? "\(component.label) \(value)" : value
+            case .day, .week:
+                let value = timerComponentCount == 1 ? breakTime(for: state) ?? timers.value(for: component) : specificTimerValue(for: component, timers: timers)
                 guard !value.isEmpty else { return nil }
 
                 return showsLabels ? "\(component.label) \(value)" : value
@@ -32,6 +39,11 @@ enum TimeclockMenuTitleFormatter {
         guard !parts.isEmpty else { return state.menuBarTitle }
 
         return parts.joined(separator: " · ")
+    }
+
+    private static func breakTime(for state: TimeclockState) -> String? {
+        guard case .onBreak(let time) = state, !time.isEmpty else { return nil }
+        return time
     }
 
     private static func specificTimerValue(for component: TimeclockDisplayComponent, timers: TimeclockTimers) -> String {

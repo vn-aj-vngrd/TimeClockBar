@@ -90,28 +90,28 @@ enum TimeclockDOMDetector {
       const currentTimer = metricTime("Current");
       const dayTimer = metricTime("Day");
       const weekTimer = metricTime("Week");
-      let timer = currentTimer || dayTimer || weekTimer;
+      let primaryTimer = "";
 
       for (const selector of timerSelectors) {
-        if (timer) {
+        if (primaryTimer) {
           break;
         }
 
         const el = document.querySelector(selector);
         const text = cleanTimer(el?.innerText || el?.textContent || "");
         if (text) {
-          timer = text;
+          primaryTimer = text;
           break;
         }
       }
 
-      if (!timer) {
-        timer = findSidebarTimer();
+      if (!primaryTimer) {
+        primaryTimer = findSidebarTimer();
       }
 
-      if (!timer) {
+      if (!primaryTimer) {
         const match = bodyText.match(timePattern);
-        timer = match ? match[0] : "";
+        primaryTimer = match ? match[0] : "";
       }
 
       const hasLogin =
@@ -135,8 +135,9 @@ enum TimeclockDOMDetector {
         lower.includes("on break") ||
         lower.includes("currently on break");
 
+      const detectedTimer = primaryTimer || currentTimer || dayTimer || weekTimer;
       const hasSidebarTimer =
-        Boolean(timer) &&
+        Boolean(detectedTimer) &&
         lower.includes("time clock") &&
         !hasClockIn;
 
@@ -156,7 +157,7 @@ enum TimeclockDOMDetector {
 
       return {
         state,
-        timer,
+        timer: state === "onBreak" ? (primaryTimer || currentTimer || dayTimer || weekTimer) : (currentTimer || primaryTimer || dayTimer || weekTimer),
         currentTimer,
         dayTimer,
         weekTimer,

@@ -48,6 +48,24 @@ enum ChromeColor {
         light: NSColor(calibratedWhite: 0.90, alpha: 1),
         dark: NSColor(calibratedWhite: 1, alpha: 0.12)
     )
+    static let statusWarningBackground = adaptiveColor(
+        light: NSColor.systemOrange.withAlphaComponent(0.16),
+        dark: NSColor.systemOrange.withAlphaComponent(0.22)
+    )
+    static let statusWarningText = Color(nsColor: .systemOrange)
+    static let statusWarningStroke = adaptiveColor(
+        light: NSColor.systemOrange.withAlphaComponent(0.28),
+        dark: NSColor.systemOrange.withAlphaComponent(0.36)
+    )
+    static let statusDangerBackground = adaptiveColor(
+        light: NSColor.systemRed.withAlphaComponent(0.14),
+        dark: NSColor.systemRed.withAlphaComponent(0.22)
+    )
+    static let statusDangerText = Color(nsColor: .systemRed)
+    static let statusDangerStroke = adaptiveColor(
+        light: NSColor.systemRed.withAlphaComponent(0.26),
+        dark: NSColor.systemRed.withAlphaComponent(0.38)
+    )
     static let reportBottom = Color(nsColor: .controlAccentColor)
 
     private static func adaptiveColor(light: NSColor, dark: NSColor) -> Color {

@@ -38,6 +38,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var isPolling = false
     @Published private(set) var lastRefreshedAt: Date?
+    @Published private(set) var statusIndicator: TimeclockStatusIndicator = .none
     @Published var isSettingsPresented = false
     @Published private(set) var requestedPopoverPage: PopoverPage?
 
@@ -71,10 +72,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let hotkeyKeyCodeDefaultsKey = "hotkeyKeyCode"
     private static let hotkeyModifiersDefaultsKey = "hotkeyModifiers"
     private static let weekdays = Array(1...7)
+    private static let defaultDisplayComponents: Set<TimeclockDisplayComponent> = [.status, .day]
     private static let defaultWorkingWeekdays: Set<Int> = [2, 3, 4, 5, 6]
     private static let defaultHotkeyKeyCode: UInt32 = 17
     private static let defaultHotkeyModifiers: NSEvent.ModifierFlags = [.control, .option, .command]
     private static let hotkeyModifierMask: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
+    private static let pollingInterval: TimeInterval = 1
     private static let staleTimerSeconds: TimeInterval = 120
 
     var hotkeyLabel: String {
@@ -183,6 +186,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workStartMinutes = TimeclockTimeMath.normalizedMinutes(minutes)
         UserDefaults.standard.set(workStartMinutes, forKey: Self.workStartMinutesDefaultsKey)
         updateTodayProgressTitle()
+        updateStatusIndicator()
         updateMenuBarTitle()
         scheduleReminders()
     }
@@ -191,6 +195,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workEndMinutes = TimeclockTimeMath.normalizedMinutes(minutes)
         UserDefaults.standard.set(workEndMinutes, forKey: Self.workEndMinutesDefaultsKey)
         updateTodayProgressTitle()
+        updateStatusIndicator()
         updateMenuBarTitle()
         scheduleReminders()
     }
@@ -199,6 +204,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         breakDurationMinutes = TimeclockTimeMath.normalizedDurationMinutes(minutes)
         UserDefaults.standard.set(breakDurationMinutes, forKey: Self.breakDurationMinutesDefaultsKey)
         updateTodayProgressTitle()
+        updateStatusIndicator()
         updateMenuBarTitle()
         scheduleReminders()
     }
@@ -320,6 +326,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         workingWeekdays = next
         UserDefaults.standard.set(Self.storedWorkingWeekdays(next), forKey: Self.workingWeekdaysDefaultsKey)
         updateTodayProgressTitle()
+        updateStatusIndicator()
         updateMenuBarTitle()
         scheduleReminders()
     }
@@ -334,7 +341,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         }
 
         if next.isEmpty {
-            next.insert(.day)
+            next = Self.defaultDisplayComponents
         }
 
         guard next != displayComponents else { return }
@@ -360,7 +367,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func resetDisplayDefaults() {
-        displayComponents = [.day]
+        displayComponents = Self.defaultDisplayComponents
         displayLabelsEnabled = false
         fsLogoEnabled = true
         UserDefaults.standard.set(Self.storedDisplayComponents(displayComponents), forKey: Self.displayComponentsDefaultsKey)
@@ -372,7 +379,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     func resetAllDefaults() {
         setLaunchAtLoginEnabled(false)
 
-        displayComponents = [.day]
+        displayComponents = Self.defaultDisplayComponents
         displayLabelsEnabled = false
         fsLogoEnabled = true
         workStartMinutes = 15 * 60
@@ -414,6 +421,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UserDefaults.standard.set(Int(hotkeyModifierFlags.rawValue), forKey: Self.hotkeyModifiersDefaultsKey)
 
         updateTodayProgressTitle()
+        updateStatusIndicator()
         updateMenuBarTitle()
         scheduleReminders()
     }
@@ -461,10 +469,15 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func startPolling() {
-        stopPolling()
-        isPolling = true
+        guard pollTimer == nil else {
+            readTimeclockState()
+            return
+        }
 
-        let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        isPolling = true
+        readTimeclockState()
+
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.pollingInterval, repeats: true) { [weak self] _ in
             self?.readTimeclockState()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -478,6 +491,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func readTimeclockState() {
+        guard webView.url != nil, !webView.isLoading else { return }
+
         webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript) { [weak self] result, error in
             guard let self else { return }
 
@@ -485,6 +500,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 self.state = .stale
                 self.timers = .empty
                 self.todayProgressTitle = ""
+                self.statusIndicator = .none
                 self.updateMenuBarTitle()
                 return
             }
@@ -502,8 +518,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             if resolvedState == .stale {
                 self.todayProgressTitle = ""
                 self.overtimeMinutes = 0
+                self.statusIndicator = .none
             }
             self.state = resolvedState
+            self.updateStatusIndicator()
             self.handleOvertimeNotification(for: resolvedState)
             self.updateMenuBarTitle()
             if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(resolvedState) {
@@ -522,6 +540,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         }
 
         let timer = firstNonEmpty(detection.currentTimer, detection.dayTimer, detection.weekTimer, detection.timer)
+        let breakTimer = firstNonEmpty(detection.timer, detection.currentTimer, detection.dayTimer, detection.weekTimer)
 
         switch detection.state {
         case "loginRequired":
@@ -531,7 +550,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         case "active":
             return .active(timer)
         case "onBreak":
-            return .onBreak(timer)
+            return .onBreak(breakTimer)
         default:
             return .unknown(timer.isEmpty ? nil : timer)
         }
@@ -547,6 +566,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             timers: timers,
             components: displayComponents,
             remainingTitle: todayProgressTitle,
+            statusOverride: statusIndicator.title,
             showsLabels: displayLabelsEnabled
         )
     }
@@ -603,6 +623,14 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         }
 
         return now.timeIntervalSince(lastRunningTimerChangedAt) > Self.staleTimerSeconds ? .stale : state
+    }
+
+    private func updateStatusIndicator() {
+        statusIndicator = TimeclockStatusIndicator.indicator(
+            state: state,
+            breakDurationMinutes: breakDurationMinutes,
+            overtimeMinutes: overtimeMinutes
+        )
     }
 
     private func handleLoginNotification(for state: TimeclockState) {
@@ -689,7 +717,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static func savedDisplayComponents() -> Set<TimeclockDisplayComponent> {
         if let values = UserDefaults.standard.array(forKey: displayComponentsDefaultsKey) as? [String] {
             let components = Set(values.compactMap(TimeclockDisplayComponent.init(rawValue:)))
-            return components.isEmpty ? [.day] : components
+            return components.isEmpty ? defaultDisplayComponents : components
         }
 
         if let legacy = UserDefaults.standard.string(forKey: legacyDisplayMetricDefaultsKey),
@@ -697,7 +725,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return [component]
         }
 
-        return [.day]
+        return defaultDisplayComponents
     }
 
     private static func storedDisplayComponents(_ components: Set<TimeclockDisplayComponent>) -> [String] {
@@ -708,8 +736,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     private static func runningTimerValue(state: TimeclockState, timers: TimeclockTimers) -> String {
         switch state {
-        case .active, .onBreak:
+        case .active:
             return timers.current.isEmpty ? timers.fallback : timers.current
+        case .onBreak(let time):
+            return time
         case .loading, .loginRequired, .stale, .clockedOut, .unknown:
             return ""
         }

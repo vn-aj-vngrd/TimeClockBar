@@ -114,11 +114,17 @@ struct PopoverView: View {
         if let title = statusChipTitle {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ChromeColor.primaryText)
+                .foregroundStyle(statusChipForeground)
                 .padding(.horizontal, 8)
                 .frame(height: 24)
-                .headerCapsuleContainer()
-                .help(title == "Offline" ? "Polling paused" : "Status stale")
+                .background(statusChipBackground)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(statusChipStroke, lineWidth: 0.5)
+                )
+                .shadow(color: ChromeColor.headerControlShadow, radius: 8, x: 0, y: 2)
+                .help(statusChipHelp)
         }
     }
 
@@ -131,7 +137,52 @@ struct PopoverView: View {
             return "Stale"
         }
 
-        return nil
+        return controller.statusIndicator.title
+    }
+
+    private var statusChipHelp: String {
+        if !controller.isPolling {
+            return "Polling paused"
+        }
+
+        if controller.state == .stale {
+            return "Status stale"
+        }
+
+        return controller.statusIndicator.help
+    }
+
+    private var statusChipBackground: Color {
+        switch controller.statusIndicator {
+        case .overBreak where controller.isPolling && controller.state != .stale:
+            return ChromeColor.statusDangerBackground
+        case .overtime where controller.isPolling && controller.state != .stale:
+            return ChromeColor.statusWarningBackground
+        case .none, .overtime, .overBreak:
+            return ChromeColor.headerControlBackground
+        }
+    }
+
+    private var statusChipForeground: Color {
+        switch controller.statusIndicator {
+        case .overBreak where controller.isPolling && controller.state != .stale:
+            return ChromeColor.statusDangerText
+        case .overtime where controller.isPolling && controller.state != .stale:
+            return ChromeColor.statusWarningText
+        case .none, .overtime, .overBreak:
+            return ChromeColor.primaryText
+        }
+    }
+
+    private var statusChipStroke: Color {
+        switch controller.statusIndicator {
+        case .overBreak where controller.isPolling && controller.state != .stale:
+            return ChromeColor.statusDangerStroke
+        case .overtime where controller.isPolling && controller.state != .stale:
+            return ChromeColor.statusWarningStroke
+        case .none, .overtime, .overBreak:
+            return ChromeColor.headerControlStroke
+        }
     }
 
     private var pageToggleButton: some View {

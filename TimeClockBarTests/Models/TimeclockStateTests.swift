@@ -28,4 +28,11 @@ final class TimeclockStateTests: XCTestCase {
         XCTAssertEqual(TimeclockState.unknown(nil).menuBarTitle, "Unknown")
         XCTAssertEqual(TimeclockState.unknown(nil).headerTitle, "Unknown status")
     }
+
+    func testStatusIndicatorText() {
+        XCTAssertNil(TimeclockStatusIndicator.none.title)
+        XCTAssertEqual(TimeclockStatusIndicator.overtime.title, "Overtime")
+        XCTAssertEqual(TimeclockStatusIndicator.overBreak.title, "Over break")
+        XCTAssertEqual(TimeclockStatusIndicator.overBreak.help, "Break is over the configured duration")
+    }
 }
