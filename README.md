@@ -33,6 +33,14 @@ For a quick internal install, download or build `TimeClockBar-1.0-internal.zip`,
 
 The current internal package is ad-hoc signed from the local Xcode project. macOS may show an unsigned/unverified developer warning when sharing the zip outside the build machine. For a company-wide release without that warning, package with an Apple Developer ID, enable hardened runtime, and notarize the app.
 
+For developers who have Xcode and source access, the easiest no-signing-key path is to build and install locally:
+
+```sh
+make install-local
+```
+
+That builds the Release app on the developer's Mac, copies it to `~/Applications`, and opens it. This avoids Developer ID key sharing because each developer gets a local Xcode-signed app. It does not make a shared zip warning-free on other Macs.
+
 ## Package The App
 
 Build a Release app and zip it for internal sharing:
@@ -84,6 +92,8 @@ There is no separate package manager, backend service, database, or web build st
 - `make test` runs the macOS XCTest suite.
 - `make package` builds Release and creates the internal zip.
 - `make verify` validates the Release app code signature.
+- `make quit-local` quits the locally running app if needed.
+- `make install-local` builds Release, installs it to `~/Applications`, and opens it.
 - `make release` cleans, packages, and verifies the internal zip.
 - `make clean` removes build artifacts.
 - `make distclean` removes build artifacts and packaged zips.
