@@ -17,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     private var fsLogoCancellable: AnyCancellable?
     private var appThemeCancellable: AnyCancellable?
     private var tooltipTimer: Timer?
-    private var popoverResizeTimer: Timer?
     private var hotkeyRef: EventHotKeyRef?
     private var hotkeyEventHandler: EventHandlerRef?
     private let pathMonitor = NWPathMonitor()
@@ -31,8 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     private static let hotkeyID: UInt32 = 1
     private static let popoverWidth: CGFloat = 460
     private static let popoverHeight: CGFloat = 640
-    private static let preferredSettingsPopoverHeight: CGFloat = 860
-    private static let popoverScreenPadding: CGFloat = 44
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -56,7 +53,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     func applicationWillTerminate(_ notification: Notification) {
         controller.stopPolling()
         tooltipTimer?.invalidate()
-        popoverResizeTimer?.invalidate()
         unregisterHotkey()
         pathMonitor.cancel()
 
@@ -93,9 +89,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
                 controller: controller,
                 openBrowser: { [weak self] url in self?.openBrowser(url: url) },
                 openAbout: { [weak self] in self?.showAboutWindow() },
-                resizeForSettings: { [weak self] isSettingsPresented in
-                    self?.resizePopoverForSettings(isSettingsPresented)
-                },
                 quit: { NSApp.terminate(nil) }
             )
         )
@@ -281,53 +274,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         guard let button = statusItem?.button else { return }
 
         NSApp.activate(ignoringOtherApps: true)
-        popover.contentSize = Self.popoverSize(for: button.window?.screen, isSettingsPresented: controller.isSettingsPresented)
+        popover.contentSize = Self.popoverSize()
         applyAppTheme(controller.appTheme)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         applyAppTheme(controller.appTheme)
         controller.readTimeclockState()
-    }
-
-    private func resizePopoverForSettings(_ isSettingsPresented: Bool) {
-        let targetSize = Self.popoverSize(
-            for: statusItem?.button?.window?.screen,
-            isSettingsPresented: isSettingsPresented
-        )
-
-        guard popover.contentSize != targetSize else { return }
-
-        guard popover.isShown else {
-            popover.contentSize = targetSize
-            return
-        }
-
-        popoverResizeTimer?.invalidate()
-        let startSize = popover.contentSize
-        let startDate = Date()
-        let duration = 0.32
-
-        let timer = Timer(timeInterval: 1 / 45, repeats: true) { [weak self] timer in
-            guard let self else {
-                timer.invalidate()
-                return
-            }
-
-            let progress = min(1, Date().timeIntervalSince(startDate) / duration)
-            let eased = progress * progress * (3 - 2 * progress)
-            self.popover.contentSize = NSSize(
-                width: startSize.width + (targetSize.width - startSize.width) * eased,
-                height: startSize.height + (targetSize.height - startSize.height) * eased
-            )
-
-            if progress >= 1 {
-                timer.invalidate()
-                self.popoverResizeTimer = nil
-                self.popover.contentSize = targetSize
-            }
-        }
-
-        popoverResizeTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func showStatusMenu() {
@@ -440,14 +391,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         return image
     }
 
-    private static func popoverSize(for screen: NSScreen? = NSScreen.main, isSettingsPresented: Bool = false) -> NSSize {
-        guard isSettingsPresented else {
-            return NSSize(width: popoverWidth, height: popoverHeight)
-        }
-
-        let availableHeight = max(0, (screen ?? NSScreen.main)?.visibleFrame.height ?? popoverHeight)
-        let responsiveHeight = min(preferredSettingsPopoverHeight, max(popoverHeight, availableHeight - popoverScreenPadding))
-        return NSSize(width: popoverWidth, height: responsiveHeight)
+    private static func popoverSize() -> NSSize {
+        NSSize(width: popoverWidth, height: popoverHeight)
     }
 
     private static func brandAppImage() -> NSImage? {

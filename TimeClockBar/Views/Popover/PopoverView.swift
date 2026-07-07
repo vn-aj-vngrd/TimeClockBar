@@ -12,7 +12,6 @@ struct PopoverView: View {
 
     let openBrowser: (URL) -> Void
     let openAbout: () -> Void
-    let resizeForSettings: (Bool) -> Void
     let quit: () -> Void
 
     var body: some View {
@@ -21,8 +20,7 @@ struct PopoverView: View {
 
             content
         }
-        .frame(width: 460)
-        .frame(minHeight: 640, maxHeight: .infinity)
+        .frame(width: 460, height: 640)
         .background(Color.clear)
         .onChange(of: controller.isSettingsPresented) { _, isPresented in
             if isPresented {
@@ -277,7 +275,6 @@ struct PopoverView: View {
 
         pageBeforeSettings = page
         isClosingSettings = false
-        resizeForSettings(true)
         withAnimation(.easeInOut(duration: 0.32)) {
             page = .settings
             controller.isSettingsPresented = true
@@ -286,7 +283,6 @@ struct PopoverView: View {
 
     private func closeSettings() {
         isClosingSettings = true
-        resizeForSettings(false)
         withAnimation(.easeInOut(duration: 0.32)) {
             page = pageBeforeSettings == .settings ? .timeclock : pageBeforeSettings
             controller.isSettingsPresented = false
@@ -318,14 +314,12 @@ struct PopoverView: View {
     private func showTimeclock() {
         page = .timeclock
         controller.isSettingsPresented = false
-        resizeForSettings(false)
     }
 
     private func showDailyReport() {
         controller.loadDailyReport()
         page = .dailyReport
         controller.isSettingsPresented = false
-        resizeForSettings(false)
     }
 
     private func handleShortcut(_ event: NSEvent) -> Bool {
@@ -448,7 +442,6 @@ private extension View {
         controller: TimeclockController(),
         openBrowser: { _ in },
         openAbout: {},
-        resizeForSettings: { _ in },
         quit: {}
     )
 }

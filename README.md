@@ -38,24 +38,13 @@ The current internal package is ad-hoc signed from the local Xcode project. macO
 Build a Release app and zip it for internal sharing:
 
 ```sh
-rm -rf build/TimeClockBarPackage
-mkdir -p dist
-xcodebuild -project TimeClockBar.xcodeproj \
-  -scheme TimeClockBar \
-  -configuration Release \
-  -destination 'platform=macOS' \
-  -derivedDataPath build/TimeClockBarPackage \
-  build
-ditto -c -k --keepParent \
-  'build/TimeClockBarPackage/Build/Products/Release/Time Clock Bar.app' \
-  'dist/TimeClockBar-1.0-internal.zip'
+make release
 ```
 
-Validate the built app bundle:
+The package is written to `dist/TimeClockBar-1.0-internal.zip`. To build a different package version name:
 
 ```sh
-codesign --verify --deep --strict --verbose=2 \
-  'build/TimeClockBarPackage/Build/Products/Release/Time Clock Bar.app'
+make release VERSION=1.1
 ```
 
 ## Development
@@ -63,22 +52,41 @@ codesign --verify --deep --strict --verbose=2 \
 Open the project in Xcode:
 
 ```sh
-open TimeClockBar.xcodeproj
+make dev
 ```
 
 Build from the command line:
 
 ```sh
-xcodebuild -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug build
+make build
+```
+
+Build and run the Debug app without opening Xcode:
+
+```sh
+make run
 ```
 
 Run tests from the command line:
 
 ```sh
-xcodebuild test -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug -destination 'platform=macOS'
+make test
 ```
 
 There is no separate package manager, backend service, database, or web build step in this repository. The app currently uses Apple frameworks only.
+
+## Make Commands
+
+- `make help` lists the available commands.
+- `make dev` opens the Xcode project.
+- `make build` builds the Debug app.
+- `make run` builds the Debug app and opens it.
+- `make test` runs the macOS XCTest suite.
+- `make package` builds Release and creates the internal zip.
+- `make verify` validates the Release app code signature.
+- `make release` cleans, packages, and verifies the internal zip.
+- `make clean` removes build artifacts.
+- `make distclean` removes build artifacts and packaged zips.
 
 ## Manual Release Check
 

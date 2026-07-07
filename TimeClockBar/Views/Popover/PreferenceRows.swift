@@ -205,6 +205,7 @@ struct PreferenceMenuPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, label: String)]
     @State private var isHovered = false
+    private let minimumWidth: CGFloat = 88
 
     private var selectedLabel: String {
         options.first { $0.value == selection }?.label ?? ""
@@ -216,11 +217,16 @@ struct PreferenceMenuPicker<Value: Hashable>: View {
                 Button {
                     selection = option.value
                 } label: {
-                    if option.value == selection {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                            .opacity(option.value == selection ? 1 : 0)
+                            .accessibilityHidden(true)
+                            .frame(width: 12)
+
                         Text(option.label)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
+                    .frame(minWidth: minimumWidth, alignment: .leading)
                 }
             }
         } label: {
@@ -239,7 +245,7 @@ struct PreferenceMenuPicker<Value: Hashable>: View {
             }
             .padding(.leading, 6)
             .padding(.trailing, 2)
-            .frame(minWidth: 78, minHeight: 24)
+            .frame(minWidth: minimumWidth, minHeight: 24)
             .background(isHovered ? ChromeColor.selectHover : .clear)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
