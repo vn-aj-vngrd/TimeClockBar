@@ -66,11 +66,13 @@ Version bump rules:
 
 The bump rules live in `scripts/next-version.sh`.
 
-`make release` runs the version checks, XCTest suite, package build, and signature verification. After accepting a release, tag it so the next version starts from that point:
+`make release` runs the version checks, XCTest suite, package build, and signature verification. For local releases, tag the accepted release so the next version starts from that point:
 
 ```sh
 make tag-version
 ```
+
+For shared releases, merge to `main`. GitHub Actions computes the version from commits, runs `make release`, creates the `v<version>` tag, and uploads the zip to the GitHub Release. The workflow can also be started manually from GitHub Actions when needed.
 
 ## Development
 
@@ -117,6 +119,15 @@ There is no separate package manager, backend service, database, or web build st
 - `make release` cleans, tests, packages, and verifies the internal zip.
 - `make clean` removes build artifacts.
 - `make distclean` removes build artifacts and packaged zips.
+
+## GitHub Releases
+
+The repository includes two GitHub Actions workflows:
+
+- `CI` runs version checks and XCTest on pushes to `main` and pull requests.
+- `Release` runs automatically on pushes to `main` and can also be started manually. It computes the next version from commits, builds the zip, creates the `v<version>` tag, and attaches the zip to a GitHub Release. If the computed version is already the latest tag, it skips the release.
+
+Use GitHub Releases for shared packages. Use `make install-local` for local development installs.
 
 ## Manual Release Check
 

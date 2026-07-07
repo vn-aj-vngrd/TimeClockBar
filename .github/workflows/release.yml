@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          version="$(scripts/next-version.sh)"
+          zip_path="dist/TimeClockBar-$version-internal.zip"
+          latest_tag="$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || true)"
+
+          should_release=true
+          if [ "$latest_tag" = "v$version" ]; then
+            should_release=false
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version"
+          echo "Latest tag: ${latest_tag:-none}"
+          echo "Should release: $should_release"
+
+      - name: Guard existing tag
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${{ steps.version.outputs.version }}" >/dev/null; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists."
+            exit 1
+          fi
+
+      - name: Build package
+        if: steps.version.outputs.should_release == 'true'
+        run: make release VERSION="${{ steps.version.outputs.version }}"
+
+      - name: Create tag
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Time Clock Bar ${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" "${{ steps.version.outputs.zip_path }}" \
+            --title "Time Clock Bar ${{ steps.version.outputs.version }}" \
+            --generate-notes
