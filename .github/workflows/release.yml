@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: macos-26
 
     steps:
       - name: Checkout
@@ -48,7 +48,9 @@ jobs:
 
       - name: Build package
         if: steps.version.outputs.should_release == 'true'
-        run: make release VERSION="${{ steps.version.outputs.version }}"
+        run: |
+          make test-version
+          make package verify VERSION="${{ steps.version.outputs.version }}"
 
       - name: Create tag
         if: steps.version.outputs.should_release == 'true'

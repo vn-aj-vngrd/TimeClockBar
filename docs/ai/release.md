@@ -43,5 +43,7 @@ Versioning rule: `MARKETING_VERSION` is passed into Xcode from the computed conv
 `scripts/next-version.sh` computes the release version from conventional commits since the latest `v*` tag. Breaking changes bump major, `feat:` bumps minor, and `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, and `revert:` bump patch. `scripts/test-next-version.sh` covers that bump behavior.
 
 GitHub Actions:
-- `CI` runs version checks and XCTest on pushes to `main` and pull requests.
+- `CI` runs version checks and a Debug build on pushes to `main` and pull requests.
 - `Release` runs automatically on pushes to `main`, skips when the computed version already matches the latest tag, and creates the tag plus GitHub Release asset when there is a new version.
+
+Run `make test` locally before release changes. The app currently targets macOS 26.5, and GitHub-hosted macOS 26 runners can lag behind that OS version, which prevents hosted XCTest execution.

@@ -124,8 +124,10 @@ There is no separate package manager, backend service, database, or web build st
 
 The repository includes two GitHub Actions workflows:
 
-- `CI` runs version checks and XCTest on pushes to `main` and pull requests.
+- `CI` runs version checks and a Debug build on pushes to `main` and pull requests.
 - `Release` runs automatically on pushes to `main` and can also be started manually. It computes the next version from commits, builds the zip, creates the `v<version>` tag, and attaches the zip to a GitHub Release. If the computed version is already the latest tag, it skips the release.
+
+Run `make test` locally before release changes. The app currently targets macOS 26.5, and GitHub-hosted macOS 26 runners can lag behind that OS version, which prevents hosted XCTest execution.
 
 Use GitHub Releases for shared packages. Use `make install-local` for local development installs.
 
