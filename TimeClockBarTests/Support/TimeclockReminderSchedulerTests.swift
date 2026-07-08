@@ -36,7 +36,7 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
         XCTAssertEqual(plan.body, "Time to end your break.")
         XCTAssertEqual(plan.categoryIdentifier, TimeclockReminderScheduler.reminderCategoryIdentifier)
         XCTAssertEqual(plan.minutes, 60)
-        XCTAssertEqual(plan.delaySeconds, TimeInterval(60 * 60))
+        XCTAssertEqual(plan.delaySeconds, TimeInterval(50 * 60))
     }
 
     func testOnBreakSchedulesBreakOverReminderWithoutWorkingWeekdays() throws {
@@ -46,7 +46,17 @@ final class TimeclockReminderSchedulerTests: XCTestCase {
         ).first)
 
         XCTAssertEqual(plan.identifier, "break-over-reminder")
-        XCTAssertEqual(plan.delaySeconds, TimeInterval(60 * 60))
+        XCTAssertEqual(plan.delaySeconds, TimeInterval(50 * 60))
+    }
+
+    func testOnBreakSchedulesBreakOverReminderImmediatelyWhenAlreadyOverBreak() throws {
+        let plan = try XCTUnwrap(defaultPlans(
+            state: .onBreak("1:05"),
+            workingWeekdays: []
+        ).first)
+
+        XCTAssertEqual(plan.identifier, "break-over-reminder")
+        XCTAssertEqual(plan.delaySeconds, TimeInterval(1))
     }
 
     func testOnBreakSkipsBreakOverReminderWhenDisabled() {

@@ -116,10 +116,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         super.init()
 
         webView.navigationDelegate = self
-        TimeclockReminderScheduler.registerNotificationCategories()
-        TimeclockReminderScheduler.removeLegacyReportReminders()
-        refreshNotificationAuthorizationStatus()
-        scheduleReminders()
     }
 
     func makeWebView(url: URL? = nil) -> WKWebView {
@@ -161,6 +157,18 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func requestPopoverPage(_ page: PopoverPage?) {
         requestedPopoverPage = page
+    }
+
+    func startNotifications() {
+        TimeclockReminderScheduler.registerNotificationCategories()
+        TimeclockReminderScheduler.removeLegacyReportReminders()
+        refreshNotificationAuthorizationStatus()
+        TimeclockReminderScheduler.requestAuthorization { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.refreshNotificationAuthorizationStatus()
+                self?.scheduleReminders()
+            }
+        }
     }
 
     func setLaunchAtLoginEnabled(_ isEnabled: Bool) {

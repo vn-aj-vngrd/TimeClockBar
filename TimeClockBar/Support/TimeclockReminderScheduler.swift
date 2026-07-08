@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UserNotifications
 
 struct TimeclockReminderPlan: Equatable {
@@ -27,6 +28,10 @@ enum TimeclockReminderScheduler {
     private static let breakReminderIdentifier = "break-reminder"
     private static let breakOverReminderIdentifier = "break-over-reminder"
     private static let clockOutReminderIdentifier = "clock-out-reminder"
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.vanajvanguardia.TimeClockBar",
+        category: "Notifications"
+    )
 
     static func schedule(
         state: TimeclockState,
@@ -73,7 +78,7 @@ enum TimeclockReminderScheduler {
 
         guard !plans.isEmpty else { return }
 
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, _ in
+        requestAuthorization { isAllowed in
             guard isAllowed else { return }
 
             for plan in plans {
@@ -118,6 +123,8 @@ enum TimeclockReminderScheduler {
         var oneShotPlans: [TimeclockReminderPlan] = []
 
         if breakOverReminderEnabled && isOnBreak(state: state) {
+            let elapsedMinutes = breakElapsedMinutes(state: state) ?? 0
+            let remainingMinutes = max(0, breakDurationMinutes - elapsedMinutes)
             oneShotPlans.append(TimeclockReminderPlan(
                 identifier: breakOverReminderIdentifier,
                 title: "Over break",
@@ -125,7 +132,7 @@ enum TimeclockReminderScheduler {
                 minutes: breakDurationMinutes,
                 weekday: 0,
                 categoryIdentifier: reminderCategoryIdentifier,
-                delaySeconds: TimeInterval(max(1, breakDurationMinutes * 60))
+                delaySeconds: TimeInterval(max(1, remainingMinutes * 60))
             ))
         }
 
@@ -219,6 +226,20 @@ enum TimeclockReminderScheduler {
         ])
     }
 
+    static func requestAuthorization(completion: ((Bool) -> Void)? = nil) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, error in
+            if let error {
+                logger.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
+            }
+
+            if !isAllowed {
+                logger.notice("Notification authorization is not allowed")
+            }
+
+            completion?(isAllowed)
+        }
+    }
+
     static func removeLegacyReportReminders() {
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             let identifiers = requests
@@ -231,7 +252,7 @@ enum TimeclockReminderScheduler {
     }
 
     static func sendNotification(identifier: String, title: String, body: String, categoryIdentifier: String, delaySeconds: TimeInterval? = nil) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { isAllowed, _ in
+        requestAuthorization { isAllowed in
             guard isAllowed else { return }
 
             let content = UNMutableNotificationContent()
@@ -242,7 +263,7 @@ enum TimeclockReminderScheduler {
 
             let trigger = delaySeconds.map { UNTimeIntervalNotificationTrigger(timeInterval: $0, repeats: false) }
             let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request)
+            add(request)
         }
     }
 
@@ -259,7 +280,7 @@ enum TimeclockReminderScheduler {
             repeats: true
         )
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
+        add(request)
     }
 
     private static func scheduleIntervalNotification(identifier: String, title: String, body: String, delaySeconds: TimeInterval, categoryIdentifier: String) {
@@ -271,7 +292,17 @@ enum TimeclockReminderScheduler {
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, delaySeconds), repeats: false)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
+        add(request)
+    }
+
+    private static func add(_ request: UNNotificationRequest) {
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                logger.error("Notification request \(request.identifier, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            } else {
+                logger.debug("Notification request \(request.identifier, privacy: .public) scheduled")
+            }
+        }
     }
 
     private static func notificationIdentifiers(prefix: String) -> [String] {
@@ -298,6 +329,14 @@ enum TimeclockReminderScheduler {
         case .loading, .loginRequired, .stale, .clockedOut, .active, .unknown:
             return false
         }
+    }
+
+    private static func breakElapsedMinutes(state: TimeclockState) -> Int? {
+        if case .onBreak(let time) = state {
+            return TimeclockTimeMath.timerMinutes(from: time)
+        }
+
+        return nil
     }
 
     private static func isClockedOut(state: TimeclockState) -> Bool {

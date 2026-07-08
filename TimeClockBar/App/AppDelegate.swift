@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         NSApp.setActivationPolicy(.accessory)
         NSApp.applicationIconImage = Self.brandAppImage()
         UNUserNotificationCenter.current().delegate = self
+        controller.startNotifications()
 
         configureStatusItem()
         configurePopover()
