@@ -20,6 +20,20 @@ final class TimeclockTimeMathTests: XCTestCase {
         XCTAssertNil(TimeclockTimeMath.timerMinutes(from: "bad"))
     }
 
+    func testParsesTimerSecondsWithoutLosingPrecision() {
+        XCTAssertEqual(TimeclockTimeMath.timerSeconds(from: "0:59:50"), 3590)
+        XCTAssertEqual(TimeclockTimeMath.timerSeconds(from: "1:05.30"), 3930)
+        XCTAssertEqual(TimeclockTimeMath.timerSeconds(from: " 100:05:30 "), 360330)
+        XCTAssertEqual(TimeclockTimeMath.timerSeconds(from: "0:05"), 300)
+    }
+
+    func testRejectsMalformedAndOverflowingTimers() {
+        for value in ["", "0::30", "0:x:30", "0:60:00", "0:05:60", "-1:05", "1:05:00:02", "99999999999999999999:00"] {
+            XCTAssertNil(TimeclockTimeMath.timerSeconds(from: value), value)
+            XCTAssertNil(TimeclockTimeMath.timerMinutes(from: value), value)
+        }
+    }
+
     func testShiftDurationHandlesSameDayOvernightAndFullDay() {
         XCTAssertEqual(TimeclockTimeMath.shiftDurationMinutes(start: 9 * 60, end: 17 * 60), 480)
         XCTAssertEqual(TimeclockTimeMath.shiftDurationMinutes(start: 22 * 60, end: 6 * 60), 480)

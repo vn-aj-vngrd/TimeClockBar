@@ -51,6 +51,7 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: |
           make test-version
+          make test
           make package verify VERSION="${{ steps.version.outputs.version }}"
 
       - name: Create tag

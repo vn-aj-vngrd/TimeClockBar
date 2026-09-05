@@ -2,10 +2,16 @@
 
 ## Local Workflow
 
-Use Xcode for day-to-day development:
+Use `make dev` for the build-and-open loop:
 
 ```sh
-open TimeClockBar.xcodeproj
+make dev
+```
+
+Use `make xcode` when you only want to open the project:
+
+```sh
+make xcode
 ```
 
 Use `xcodebuild` for command-line validation:

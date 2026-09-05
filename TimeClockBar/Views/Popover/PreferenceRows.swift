@@ -218,10 +218,15 @@ struct PreferenceMenuPicker<Value: Hashable>: View {
                     selection = option.value
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "checkmark")
-                            .opacity(option.value == selection ? 1 : 0)
-                            .accessibilityHidden(true)
-                            .frame(width: 12)
+                        if option.value == selection {
+                            Image(systemName: "checkmark")
+                                .accessibilityHidden(true)
+                                .frame(width: 12)
+                        } else {
+                            Color.clear
+                                .frame(width: 12, height: 12)
+                                .accessibilityHidden(true)
+                        }
 
                         Text(option.label)
                             .fixedSize(horizontal: true, vertical: false)

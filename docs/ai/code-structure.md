@@ -29,6 +29,7 @@ TimeClockBar/
 - `TimeclockController` keeps published state, persisted preferences, polling coordination, and WebKit navigation ownership.
 - `TimeclockDOMDetector` owns the JavaScript detection script and result mapping.
 - `TimeclockReminderScheduler` owns notification category registration, reminder scheduling, and notification sending.
+- `TimeclockReminderDelivery` owns asynchronous notification-center reconciliation and snooze ownership. Keep its OS boundary injectable for delayed-operation and cancellation tests.
 - `HotkeyFormatting` owns shortcut labels.
 - `PopoverView` owns top-level popover chrome and page switching.
 - `SettingsPopover` owns settings layout and preference bindings.
@@ -47,3 +48,5 @@ After structural or behavior changes, run:
 ```sh
 xcodebuild -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration Debug build
 ```
+
+- `WorkdaySchedule` owns date/timezone resolution; `WorkdayReminderController` owns checkpoint observations and persistence.

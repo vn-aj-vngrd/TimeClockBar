@@ -75,7 +75,8 @@ enum ChromeColor {
     }
 }
 
-enum PopoverPage: Equatable {
+enum PopoverPage: Hashable {
+    case today
     case timeclock
     case dailyReport
     case settings

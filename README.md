@@ -6,13 +6,15 @@ Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Cloc
 
 - Menu-bar status for loading, login required, clocked out, active, on break, stale, overtime, and over-break states.
 - Optional menu-bar details for status, current timer, day timer, week timer, remaining time, labels, and the FS logo.
-- Compact popover with embedded Time Clock and Daily Report pages.
+- Three visible pages: Today dashboard, Time Clock, and Report on Full Scale.
 - Left-click menu-bar access and right-click menu actions for settings, About, Time Clock, Daily Report, browser links, refresh, and quit.
 - Refresh, open-current-page, page switching, and fixed keyboard shortcuts inside the popover.
 - Custom global shortcut to toggle the app, enabled by default.
 - Shift settings for work days, start time, end time, and break duration.
-- Notifications for shift start, break time, over-break, clock-out, and overtime.
-- Notification actions to open Time Clock, open Daily Report, or snooze for 5, 10, or 15 minutes.
+- Notifications for shift start, break time, over-break, clock-out, and overtime, each with a selectable alarm sound.
+- Break-start reminders require an active clock, and clock-out reminders require an active/break state. Overnight break dates and second-precision return reminders respect the configured shift and elapsed timer.
+- Snoozes retain their source and are canceled when that reminder no longer applies. Advance clock-out alerts open Report; due alerts open Time Clock and remind you to file first.
+- Notification actions to open Time Clock or Report, snooze, or silence the current checkpoint. Ordinary notification sounds use macOS presentation rules in foreground and background.
 - Launch-at-login support.
 - System, light, and dark app themes.
 - Settings reset for display settings or all app defaults.
@@ -21,7 +23,7 @@ Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Cloc
 
 ## Requirements
 
-- macOS 26.5 or newer.
+- macOS 26.0 or newer.
 - Network access to:
   - `https://timeclock.fullscale.rocks/overview`
   - `https://fullscale.rocks/daily-report`
@@ -76,19 +78,25 @@ For shared releases, run the `Release` workflow in GitHub Actions after the rele
 
 ## Development
 
-Open the project in Xcode:
+Build the Debug app and open it:
 
 ```sh
 make dev
 ```
 
-Build from the command line:
+Open the project in Xcode:
+
+```sh
+make xcode
+```
+
+Build the Debug app from the command line:
 
 ```sh
 make build
 ```
 
-Build and run the Debug app without opening Xcode:
+Build and open the Debug app directly:
 
 ```sh
 make run
@@ -106,7 +114,8 @@ There is no separate package manager, backend service, database, or web build st
 
 - `make help` lists the available commands.
 - `make version` shows app, build, and git version info.
-- `make dev` opens the Xcode project.
+- `make dev` builds the Debug app and opens it.
+- `make xcode` opens the Xcode project.
 - `make build` builds the Debug app.
 - `make run` builds the Debug app and opens it.
 - `make test` runs the macOS XCTest suite.
@@ -124,10 +133,10 @@ There is no separate package manager, backend service, database, or web build st
 
 The repository includes two GitHub Actions workflows:
 
-- `CI` runs version checks and a Debug build on pushes to `main` and pull requests.
+- `CI` runs version checks and hosted XCTest on pushes to `main` and pull requests.
 - `Release` is started manually from GitHub Actions. It computes the next version from commits, builds the zip, creates the `v<version>` tag, and attaches the zip to a GitHub Release. If the computed version is already the latest tag, it skips the release.
 
-Run `make test` locally before release changes. The app currently targets macOS 26.5, and GitHub-hosted macOS 26 runners can lag behind that OS version, which prevents hosted XCTest execution.
+Run `make test` locally before release changes. The deployment target is macOS 26.0; CI and Release run hosted XCTest on macOS 26. Physical notification, Focus, sleep/wake, and personal-use checks remain local gates.
 
 Use GitHub Releases for shared packages. Use `make install-local` for local development installs.
 
@@ -142,6 +151,7 @@ Before sharing a package internally, open the built app and verify:
 - Settings persist after restart.
 - Notifications can be allowed in macOS settings.
 - Shift, break, clock-out, overtime, and over-break reminder settings behave as expected.
+- Reminder sounds are distinct by default, configurable per reminder, and previewable.
 - Global shortcut and fixed popover shortcuts work.
 - Launch at Login can be enabled and disabled.
 - About shows the expected version and build.
@@ -158,6 +168,11 @@ Before sharing a package internally, open the built app and verify:
 
 ## Project Docs
 
+- [Product direction](PRODUCT.md) defines the workday companion and confirmed priorities.
+- [Improvement plan](docs/plans/workday-companion.md) defines the simplified Today → Time Clock → Report → clock-out flow. Implementation is in progress; use the checklist for completed capabilities.
+- [Implementation checklist](docs/plans/workday-companion-progress.md) tracks completed work, validation evidence, remaining release gates, and where to resume.
+- [Product audit](docs/product/audit-2026-09-05.md) records source findings and validation limits.
+- [Design](DESIGN.md) and [domain language](CONTEXT.md) guide implementation.
 - `AGENTS.md` contains agent-facing rules.
 - `docs/ai/architecture.md` describes the app structure.
 - `docs/ai/code-structure.md` captures the source layout, ownership boundaries, and split rules.
@@ -165,3 +180,17 @@ Before sharing a package internally, open the built app and verify:
 - `docs/ai/testing.md` lists validation commands.
 - `docs/ai/release.md` covers release checks.
 - `docs/ai/coding-standards.md` captures implementation conventions.
+
+## Daily flow
+
+Clock in on **Time Clock**, follow break/return reminders, file your report on **Report**, then return to **Time Clock** to clock out. **Today** shows the next useful step. It stays quiet on days off.
+
+Use Cmd-0 for Today, Cmd-1 for Time Clock, and Cmd-2 for Report. Report remains the Full Scale website; there is no separate native editor or submission automation.
+
+For local UI verification without loading websites or scheduling notifications:
+
+```sh
+open 'build/TimeClockBarPackage/Build/Products/Release/Time Clock Bar.app' --args --preview-today
+```
+
+The preview is labeled and website pages remain paused until a normal relaunch. XCTest uses this mode automatically. See the [persistent checklist](docs/plans/workday-companion-progress.md) for release evidence.

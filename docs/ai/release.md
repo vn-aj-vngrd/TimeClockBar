@@ -43,7 +43,9 @@ Versioning rule: `MARKETING_VERSION` is passed into Xcode from the computed conv
 `scripts/next-version.sh` computes the release version from conventional commits since the latest `v*` tag. Breaking changes bump major, `feat:` bumps minor, and `fix:` or `perf:` bump patch. `scripts/test-next-version.sh` covers that bump behavior.
 
 GitHub Actions:
-- `CI` runs version checks and a Debug build on pushes to `main` and pull requests.
+- `CI` runs version checks and hosted XCTest on pushes to `main` and pull requests.
 - `Release` is started manually from GitHub Actions, skips when the computed version already matches the latest tag, and creates the tag plus GitHub Release asset when there is a new version.
 
-Run `make test` locally before release changes. The app currently targets macOS 26.5, and GitHub-hosted macOS 26 runners can lag behind that OS version, which prevents hosted XCTest execution.
+Run `make test` locally before release changes. The deployment target is macOS 26.0; CI and Release run hosted XCTest on macOS 26. Physical notification, Focus, sleep/wake, and personal-use checks remain local gates.
+
+For agent-driven releases, open the installed app normally so Time Clock and Report stay accessible. Follow the live website safety rule in AGENTS.md: use fixtures for behavioral tests and never perform a real attendance/report action as part of release validation. `make install-local APP_ARGS=--preview-today` is available when a website-free native preview is specifically useful.

@@ -4,6 +4,7 @@ import UserNotifications
 
 struct SettingsPopover: View {
     @ObservedObject var controller: TimeclockController
+    @ObservedObject private var delivery = TimeclockReminderScheduler.delivery
     @Binding var isRecordingHotkey: Bool
     @State private var isResetAllConfirmationPresented = false
 
@@ -14,12 +15,11 @@ struct SettingsPopover: View {
             displaySection
             shiftSection
             notificationPermissionSection
+            reminderSoundsSection
             shiftStartNotificationSection
             breakNotificationSection
             shiftEndNotificationSection
-            #if DEBUG
-                notificationTestSection
-            #endif
+            notificationTestSection
             shortcutsSection
             appSection
         }
@@ -94,6 +94,21 @@ struct SettingsPopover: View {
                     }
                 }
             }
+
+            PreferenceRow("Sound") {
+                HStack(spacing: 8) {
+                    Text(notificationSoundLabel)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(notificationSoundEnabled ? ChromeColor.secondaryText : ChromeColor.primaryText)
+
+                    if !notificationSoundEnabled {
+                        Button("Open") {
+                            openNotificationSettings()
+                        }
+                        .buttonStyle(.settingsControl)
+                    }
+                }
+            }
             .lastPreferenceRow()
         }
     }
@@ -111,6 +126,17 @@ struct SettingsPopover: View {
                 PreferenceToggleRow("Before shift", isOn: workReminderEnabledBinding)
                     .lastPreferenceRow()
             }
+        }
+    }
+
+    private var reminderSoundsSection: some View {
+        PreferenceSection("Reminder Sounds") {
+            reminderSoundRow("Shift start", kind: .workStart)
+            reminderSoundRow("Break", kind: .breakStart)
+            reminderSoundRow("Over break", kind: .breakOver)
+            reminderSoundRow("Clock out", kind: .clockOut)
+            reminderSoundRow("Overtime", kind: .overtime)
+                .lastPreferenceRow()
         }
     }
 
@@ -142,10 +168,11 @@ struct SettingsPopover: View {
         }
     }
 
-    #if DEBUG
         private var notificationTestSection: some View {
             PreferenceSection("Notification Tests") {
                 VStack(alignment: .leading, spacing: 8) {
+                    Text(delivery.status).font(.caption).foregroundStyle(.secondary)
+                    if let error = delivery.lastError { Text(error).font(.caption).foregroundStyle(.red) }
                     Text("Send test")
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(ChromeColor.primaryText)
@@ -169,10 +196,17 @@ struct SettingsPopover: View {
             Button(title, action: action)
                 .buttonStyle(.settingsControl)
         }
-    #endif
 
     private var appSection: some View {
         PreferenceSection("App") {
+            PreferenceRow("Work timezone") {
+                Picker("Work timezone", selection: Binding(get: { controller.workTimeZone }, set: controller.setWorkTimeZone)) {
+                    ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { Text($0).tag($0) }
+                }.labelsHidden().frame(maxWidth: 240)
+            }
+            if let error = controller.launchAtLoginError {
+                Text("Launch at login: \(error)").foregroundStyle(.red).padding()
+            }
             PreferenceRow("Theme") {
                 PreferenceMenuPicker(
                     selection: appThemeBinding,
@@ -405,6 +439,46 @@ struct SettingsPopover: View {
             return "Not set"
         @unknown default:
             return "Unknown"
+        }
+    }
+
+    private var notificationSoundEnabled: Bool {
+        controller.notificationSoundSetting == .enabled
+    }
+
+    private var notificationSoundLabel: String {
+        switch controller.notificationSoundSetting {
+        case .enabled:
+            return "On"
+        case .disabled:
+            return "Off"
+        case .notSupported:
+            return "Unavailable"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    private func reminderSoundRow(_ title: String, kind: TimeclockReminderKind) -> some View {
+        let sound = controller.reminderSound(for: kind)
+        let isPreviewing = controller.previewingReminderKind == kind
+
+        return PreferenceRow(title) {
+            HStack(spacing: 6) {
+                PreferenceMenuPicker(
+                    selection: Binding(
+                        get: { controller.reminderSound(for: kind) },
+                        set: { controller.setReminderSound($0, for: kind) }
+                    ),
+                    options: TimeclockReminderSound.allCases.map { (value: $0, label: $0.label) }
+                )
+
+                Button(isPreviewing ? "Stop" : "Preview") {
+                    controller.toggleReminderSoundPreview(for: kind)
+                }
+                .buttonStyle(.settingsControl)
+                .accessibilityLabel(isPreviewing ? "Stop \(sound.label) preview" : "Preview \(sound.label)")
+            }
         }
     }
 

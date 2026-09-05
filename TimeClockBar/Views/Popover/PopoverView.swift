@@ -4,20 +4,20 @@ import WebKit
 
 struct PopoverView: View {
     @ObservedObject var controller: TimeclockController
-    @State private var isReportHovered = false
     @State private var isRecordingHotkey = false
-    @State private var page: PopoverPage = .timeclock
+    @State private var page: PopoverPage = .today
     @State private var pageBeforeSettings: PopoverPage = .timeclock
     @State private var isClosingSettings = false
 
     let openBrowser: (URL) -> Void
     let openAbout: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let quit: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             header
-
+            if page != .settings { pageNavigation }
             content
         }
         .frame(width: 460, height: 640)
@@ -68,18 +68,18 @@ struct PopoverView: View {
 
                         IconButton("Refresh", systemImage: "arrow.clockwise", shortcut: shortcutLabel("⌘R")) {
                             refresh()
-                        }
+                        }.disabled(controller.isPreview)
 
                         IconButton("Open Browser", systemImage: "arrow.up.right.square", shortcut: shortcutLabel("⌘O")) {
-                            openBrowser(currentURL)
-                        }
+                            if !controller.isPreview { openBrowser(currentURL) }
+                        }.disabled(controller.isPreview)
                     }
                     .padding(3)
                     .headerCapsuleContainer()
                 }
 
                 Spacer()
-
+                if page != .settings { Text("Time Clock Bar").font(.system(size: 13, weight: .semibold)) }
                 if page == .settings {
                     IconButton("About", systemImage: "info.circle") {
                         openAbout()
@@ -89,7 +89,6 @@ struct PopoverView: View {
                 } else {
                     HStack(spacing: 8) {
                         statusChip
-                        pageToggleButton
                     }
                 }
             }
@@ -127,6 +126,7 @@ struct PopoverView: View {
     }
 
     private var statusChipTitle: String? {
+        if controller.isPreview { return "Preview" }
         if !controller.isPolling {
             return "Offline"
         }
@@ -139,6 +139,7 @@ struct PopoverView: View {
     }
 
     private var statusChipHelp: String {
+        if controller.isPreview { return "Local preview with website access paused" }
         if !controller.isPolling {
             return "Polling paused"
         }
@@ -183,25 +184,19 @@ struct PopoverView: View {
         }
     }
 
-    private var pageToggleButton: some View {
-        Button {
-            togglePage()
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: page == .timeclock ? "doc.text.fill" : "clock.fill")
-                    .font(.system(size: 12, weight: .bold))
-
-                Text(page == .timeclock ? "Report" : "Time Clock")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(ChromeColor.headerAction)
-            .frame(height: 30)
-            .padding(.horizontal, 12)
-            .headerCapsuleContainer(isHovered: isReportHovered)
+    private var pageNavigation: some View {
+        Picker("Page", selection: Binding(get: { page }, set: { show(page: $0) })) {
+            Text("Today").tag(PopoverPage.today)
+            Text("Time Clock").tag(PopoverPage.timeclock)
+            Text("Report").tag(PopoverPage.dailyReport)
         }
-        .buttonStyle(.plain)
-        .help(page == .timeclock ? shortcutHelp("Report", "⌘2") : shortcutHelp("Time Clock", "⌘1"))
-        .onHover { isReportHovered = $0 }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(ChromeColor.headerBackground)
+        .help("Today ⌘0 · Time Clock ⌘1 · Report ⌘2")
     }
 
     private var content: some View {
@@ -212,6 +207,12 @@ struct PopoverView: View {
                     isRecordingHotkey: $isRecordingHotkey,
                     quit: quit
                 )
+            } else if page == .today {
+                TodayView(controller: controller, workday: controller.workday,
+                          openClock: showTimeclock, openReport: showDailyReport)
+            } else if controller.isPreview {
+                ContentUnavailableView(page == .timeclock ? "Time Clock" : "Report", systemImage: page == .timeclock ? "clock" : "doc.text",
+                                       description: Text("Website access is paused for this local preview."))
             } else {
                 WebView(webView: currentWebView)
                     .id(page)
@@ -224,7 +225,7 @@ struct PopoverView: View {
     }
 
     private var contentTransition: AnyTransition {
-        isClosingSettings
+        reduceMotion ? .identity : isClosingSettings
             ? .asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing))
             : .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
     }
@@ -235,7 +236,7 @@ struct PopoverView: View {
             return controller.webView
         case .dailyReport:
             return controller.dailyReportWebView
-        case .settings:
+        case .settings, .today:
             return controller.webView
         }
     }
@@ -246,14 +247,14 @@ struct PopoverView: View {
             return controller.url
         case .dailyReport:
             return controller.dailyReportURL
-        case .settings:
+        case .settings, .today:
             return controller.url
         }
     }
 
     private func refresh() {
         switch page {
-        case .timeclock:
+        case .timeclock, .today:
             controller.reload()
         case .dailyReport:
             controller.reloadDailyReport()
@@ -275,7 +276,7 @@ struct PopoverView: View {
 
         pageBeforeSettings = page
         isClosingSettings = false
-        withAnimation(.easeInOut(duration: 0.32)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
             page = .settings
             controller.isSettingsPresented = true
         }
@@ -283,25 +284,17 @@ struct PopoverView: View {
 
     private func closeSettings() {
         isClosingSettings = true
-        withAnimation(.easeInOut(duration: 0.32)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
             page = pageBeforeSettings == .settings ? .timeclock : pageBeforeSettings
             controller.isSettingsPresented = false
         }
     }
 
-    private func togglePage() {
-        switch page {
-        case .timeclock:
-            showDailyReport()
-        case .dailyReport:
-            showTimeclock()
-        case .settings:
-            closeSettings()
-        }
-    }
-
     private func show(page: PopoverPage) {
         switch page {
+        case .today:
+            self.page = .today
+            controller.isSettingsPresented = false
         case .timeclock:
             showTimeclock()
         case .dailyReport:
@@ -327,6 +320,7 @@ struct PopoverView: View {
         let key = event.charactersIgnoringModifiers?.lowercased()
 
         if modifiers == [.command, .option] {
+            guard !controller.isPreview else { return true }
             switch key {
             case "1":
                 openBrowser(controller.url)
@@ -342,6 +336,8 @@ struct PopoverView: View {
         guard modifiers == .command else { return false }
 
         switch key {
+        case "0":
+            show(page: .today)
         case ",":
             showSettings()
         case "1":
@@ -351,7 +347,7 @@ struct PopoverView: View {
         case "r":
             refresh()
         case "o":
-            openBrowser(currentURL)
+            if !controller.isPreview { openBrowser(currentURL) }
         case "q":
             quit()
         default:

@@ -1,13 +1,19 @@
 import AppKit
+import AVFoundation
 import Combine
 import Foundation
 import ServiceManagement
 import UserNotifications
 import WebKit
 
-final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegate {
+final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegate, AVAudioPlayerDelegate {
     let url = URL(string: "https://timeclock.fullscale.rocks/overview")!
     let dailyReportURL = URL(string: "https://fullscale.rocks/daily-report")!
+    let isPreview = ProcessInfo.processInfo.arguments.contains("--preview-today") || ProcessInfo.processInfo.environment["TIMECLOCKBAR_PREVIEW"] == "1" || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil
+    let workday = TimeclockReminderScheduler.workday
+    @Published private(set) var workTimeZone = UserDefaults.standard.string(forKey: "workTimeZone") ?? TimeZone.current.identifier
+    @Published private(set) var launchAtLoginError: String?
+    private var lastReminderReconciledAt = Date.distantPast
     let webView: WKWebView
     let dailyReportWebView: WKWebView
 
@@ -30,12 +36,15 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var clockOutReminderEnabled: Bool
     @Published private(set) var clockOutReminderLeadMinutes: Int
     @Published private(set) var overtimeReminderEnabled: Bool
+    @Published private(set) var reminderSounds: [TimeclockReminderKind: TimeclockReminderSound]
+    @Published private(set) var previewingReminderKind: TimeclockReminderKind?
     @Published private(set) var workingWeekdays: Set<Int>
     @Published private(set) var hotkeyEnabled: Bool
     @Published private(set) var hotkeyKeyCode: UInt32
     @Published private(set) var hotkeyModifierFlags: NSEvent.ModifierFlags
     @Published private(set) var isRecordingHotkey = false
     @Published private(set) var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published private(set) var notificationSoundSetting: UNNotificationSetting = .notSupported
     @Published private(set) var isPolling = false
     @Published private(set) var lastRefreshedAt: Date?
     @Published private(set) var statusIndicator: TimeclockStatusIndicator = .none
@@ -43,6 +52,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var requestedPopoverPage: PopoverPage?
 
     private var pollTimer: Timer?
+    private var stateReadGeneration = 0
+    private var hasNavigationFailed = false
     private var lastDetection: TimeclockDOMDetection?
     private var timers = TimeclockTimers.empty
     private var lastRunningTimerValue = ""
@@ -50,6 +61,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private var hasSentLoginNotification = false
     private var hasSentOvertimeNotification = false
     private var overtimeMinutes = 0
+    private var reminderSoundPreviewPlayer: AVAudioPlayer?
 
     private static let displayComponentsDefaultsKey = "timeclockDisplayComponents"
     private static let displayLabelsEnabledDefaultsKey = "displayLabelsEnabled"
@@ -67,6 +79,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let clockOutReminderEnabledDefaultsKey = "clockOutReminderEnabled"
     private static let clockOutReminderLeadMinutesDefaultsKey = "clockOutReminderLeadMinutes"
     private static let overtimeReminderEnabledDefaultsKey = "overtimeReminderEnabled"
+    private static let reminderSoundDefaultsKeyPrefix = "reminderSound."
     private static let workingWeekdaysDefaultsKey = "workingWeekdays"
     private static let hotkeyEnabledDefaultsKey = "hotkeyEnabled"
     private static let hotkeyKeyCodeDefaultsKey = "hotkeyKeyCode"
@@ -108,12 +121,15 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         clockOutReminderEnabled = Self.savedBool(Self.clockOutReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderLeadMinutes = Self.savedMinutes(Self.clockOutReminderLeadMinutesDefaultsKey, defaultValue: 15)
         overtimeReminderEnabled = Self.savedBool(Self.overtimeReminderEnabledDefaultsKey, defaultValue: true)
+        reminderSounds = Self.savedReminderSounds()
+        previewingReminderKind = nil
         workingWeekdays = Self.savedWorkingWeekdays()
         hotkeyEnabled = Self.savedBool(Self.hotkeyEnabledDefaultsKey, defaultValue: true)
         hotkeyKeyCode = UInt32(UserDefaults.standard.object(forKey: Self.hotkeyKeyCodeDefaultsKey) as? Int ?? Int(Self.defaultHotkeyKeyCode))
         hotkeyModifierFlags = Self.savedHotkeyModifiers()
 
         super.init()
+        if !isPreview { UserDefaults.standard.set(workTimeZone, forKey: "workTimeZone") }
 
         webView.navigationDelegate = self
     }
@@ -125,6 +141,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func load() {
+        guard !isPreview else { return }
         guard webView.url == nil else { return }
 
         state = .loading
@@ -132,7 +149,10 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func reload() {
+        guard !isPreview else { return }
+        stateReadGeneration += 1
         state = .loading
+        scheduleReminders()
 
         if webView.url == nil {
             load()
@@ -142,12 +162,14 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func loadDailyReport() {
+        guard !isPreview else { return }
         guard dailyReportWebView.url == nil else { return }
 
         dailyReportWebView.load(URLRequest(url: dailyReportURL))
     }
 
     func reloadDailyReport() {
+        guard !isPreview else { return }
         if dailyReportWebView.url == nil {
             loadDailyReport()
         } else {
@@ -160,6 +182,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func startNotifications() {
+        guard !isPreview else { return }
         TimeclockReminderScheduler.registerNotificationCategories()
         TimeclockReminderScheduler.removeLegacyReportReminders()
         refreshNotificationAuthorizationStatus()
@@ -172,6 +195,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
+        launchAtLoginError = nil
         do {
             if isEnabled {
                 try SMAppService.mainApp.register()
@@ -179,7 +203,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            // ponytail: expose only the final system state; add user-facing errors if registration fails in real use.
+            launchAtLoginError = error.localizedDescription
         }
 
         launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
@@ -262,62 +286,97 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     func setOvertimeReminderEnabled(_ isEnabled: Bool) {
         overtimeReminderEnabled = isEnabled
         UserDefaults.standard.set(isEnabled, forKey: Self.overtimeReminderEnabledDefaultsKey)
+        scheduleReminders()
         handleOvertimeNotification(for: state)
     }
 
-    func snoozeNotification(title: String, body: String, categoryIdentifier: String, minutes: Int) {
-        TimeclockReminderScheduler.sendNotification(
-            identifier: "snooze-\(UUID().uuidString)",
-            title: title,
-            body: body,
-            categoryIdentifier: categoryIdentifier,
-            delaySeconds: TimeInterval(minutes * 60)
-        )
+    func reminderSound(for kind: TimeclockReminderKind) -> TimeclockReminderSound {
+        reminderSounds[kind] ?? .defaultSound(for: kind)
+    }
+
+    func setReminderSound(_ sound: TimeclockReminderSound, for kind: TimeclockReminderKind) {
+        guard reminderSound(for: kind) != sound else { return }
+
+        reminderSounds[kind] = sound
+        UserDefaults.standard.set(sound.rawValue, forKey: Self.reminderSoundDefaultsKey(for: kind))
+        scheduleReminders()
+    }
+
+    func toggleReminderSoundPreview(for kind: TimeclockReminderKind) {
+        if previewingReminderKind == kind {
+            stopReminderSound()
+        } else {
+            playReminderSoundPreview(reminderSound(for: kind), for: kind)
+        }
+    }
+
+    func stopReminderSound() {
+        reminderSoundPreviewPlayer?.stop()
+        reminderSoundPreviewPlayer = nil
+        previewingReminderKind = nil
+    }
+
+    func snoozeNotification(_ request: UNNotificationRequest, minutes: Int) {
+        TimeclockReminderScheduler.snooze(request, minutes: minutes)
     }
 
     func sendTestShiftReminder() {
+        guard !isPreview else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-shift-reminder-\(UUID().uuidString)",
             title: "Shift starts soon",
             body: "Your work shift starts in \(workReminderLeadMinutes) minutes.",
-            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            reminderSound: reminderSound(for: .workStart)
         )
     }
 
     func sendTestBreakReminder() {
+        guard !isPreview else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-break-reminder-\(UUID().uuidString)",
             title: "Break reminder",
             body: "Time for your preferred break.",
-            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            reminderSound: reminderSound(for: .breakStart)
         )
     }
 
     func sendTestBreakOverReminder() {
+        guard !isPreview else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-break-over-reminder-\(UUID().uuidString)",
             title: "Over break",
             body: "Time to end your break.",
-            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            reminderSound: reminderSound(for: .breakOver)
         )
     }
 
     func sendTestClockOutReminder() {
+        guard !isPreview else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-clock-out-reminder-\(UUID().uuidString)",
             title: "Clock out reminder",
-            body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Submit your report before clocking out.",
-            categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
+            body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Open Time Clock to clock out on time.",
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            reminderSound: reminderSound(for: .clockOut)
         )
     }
 
     func sendTestOvertimeReminder() {
+        guard !isPreview else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-overtime-reminder-\(UUID().uuidString)",
             title: "Overtime",
-            body: "You are over today's target. Submit your report before clocking out.",
-            categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
+            body: "You are over today's work-hours target. Open Time Clock to review your clock-out status.",
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            reminderSound: reminderSound(for: .overtime)
         )
+    }
+
+    func playReminderSound(_ sound: TimeclockReminderSound) {
+        playReminderSound(sound, previewing: nil)
     }
 
     func setWorkingWeekday(_ weekday: Int, isEnabled: Bool) {
@@ -401,6 +460,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         clockOutReminderEnabled = true
         clockOutReminderLeadMinutes = 15
         overtimeReminderEnabled = true
+        reminderSounds = Self.defaultReminderSounds
+        stopReminderSound()
         workingWeekdays = Self.defaultWorkingWeekdays
         appTheme = .system
         isRecordingHotkey = false
@@ -422,6 +483,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UserDefaults.standard.set(clockOutReminderEnabled, forKey: Self.clockOutReminderEnabledDefaultsKey)
         UserDefaults.standard.set(clockOutReminderLeadMinutes, forKey: Self.clockOutReminderLeadMinutesDefaultsKey)
         UserDefaults.standard.set(overtimeReminderEnabled, forKey: Self.overtimeReminderEnabledDefaultsKey)
+        for (kind, sound) in reminderSounds {
+            UserDefaults.standard.set(sound.rawValue, forKey: Self.reminderSoundDefaultsKey(for: kind))
+        }
         UserDefaults.standard.set(Self.storedWorkingWeekdays(workingWeekdays), forKey: Self.workingWeekdaysDefaultsKey)
         UserDefaults.standard.set(appTheme.rawValue, forKey: Self.appThemeDefaultsKey)
         UserDefaults.standard.set(hotkeyEnabled, forKey: Self.hotkeyEnabledDefaultsKey)
@@ -472,11 +536,13 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
             DispatchQueue.main.async {
                 self?.notificationAuthorizationStatus = settings.authorizationStatus
+                self?.notificationSoundSetting = settings.soundSetting
             }
         }
     }
 
     func startPolling() {
+        guard !isPreview else { return }
         guard pollTimer == nil else {
             readTimeclockState()
             return
@@ -493,16 +559,23 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func stopPolling() {
+        stateReadGeneration += 1
         pollTimer?.invalidate()
         pollTimer = nil
         isPolling = false
+        state = .stale
+        statusIndicator = .none
+        updateMenuBarTitle()
+        scheduleReminders()
     }
 
     func readTimeclockState() {
-        guard webView.url != nil, !webView.isLoading else { return }
+        guard !isPreview else { return }
+        guard isPolling, !hasNavigationFailed, webView.url != nil, !webView.isLoading else { return }
+        let generation = stateReadGeneration
 
         webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript) { [weak self] result, error in
-            guard let self else { return }
+            guard let self, self.isPolling, self.stateReadGeneration == generation else { return }
 
             if error != nil {
                 self.state = .stale
@@ -510,6 +583,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 self.todayProgressTitle = ""
                 self.statusIndicator = .none
                 self.updateMenuBarTitle()
+                self.scheduleReminders()
                 return
             }
 
@@ -519,6 +593,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             let nextTimers = TimeclockDOMDetector.timers(from: detection)
             let nextState = self.parseState(from: detection)
             let previousState = self.state
+            let wasOvertime = self.overtimeMinutes > 0
             self.timers = nextTimers
             self.updateTodayProgressTitle()
             self.handleLoginNotification(for: nextState)
@@ -530,16 +605,48 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             }
             self.state = resolvedState
             self.updateStatusIndicator()
-            self.handleOvertimeNotification(for: resolvedState)
             self.updateMenuBarTitle()
-            if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(resolvedState) {
+            if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(resolvedState)
+                || wasOvertime != (self.overtimeMinutes > 0)
+                || Date().timeIntervalSince(self.lastReminderReconciledAt) >= 30 {
                 self.scheduleReminders()
             }
+            self.handleOvertimeNotification(for: resolvedState)
         }
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        stateReadGeneration += 1
+        state = .loading
+        updateMenuBarTitle()
+        scheduleReminders()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        stateReadGeneration += 1
+        hasNavigationFailed = true
+        state = .stale
+        lastRefreshedAt = nil
+        updateMenuBarTitle()
+        scheduleReminders()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        self.webView(webView, didFail: navigation, withError: error)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        hasNavigationFailed = false
         readTimeclockState()
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard self?.reminderSoundPreviewPlayer === player else { return }
+
+            self?.reminderSoundPreviewPlayer = nil
+            self?.previewingReminderKind = nil
+        }
     }
 
     private func parseState(from detection: TimeclockDOMDetection?) -> TimeclockState {
@@ -664,18 +771,48 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return
         }
 
-        guard !hasSentOvertimeNotification else { return }
+        let workDate = workSchedule.currentShift(at: Date())?.id ?? WorkdaySchedule.dateString(Date())
+        let budgetKey = "overtimeNotified.v1." + workDate
+        guard !hasSentOvertimeNotification, !UserDefaults.standard.bool(forKey: budgetKey) else { return }
+        UserDefaults.standard.set(true, forKey: budgetKey)
 
         hasSentOvertimeNotification = true
         TimeclockReminderScheduler.sendNotification(
-            identifier: "overtime-reminder-\(UUID().uuidString)",
+            identifier: TimeclockReminderDelivery.overtimeOwner,
             title: "Overtime",
-            body: "You are over today's target by \(TimeclockTimeMath.durationLabel(minutes: overtimeMinutes)). Submit your report before clocking out.",
-            categoryIdentifier: TimeclockReminderScheduler.reportReminderCategoryIdentifier
+            body: "You are over today's work-hours target by \(TimeclockTimeMath.durationLabel(minutes: overtimeMinutes)). Open Time Clock to review your clock-out status.",
+            categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            reminderSound: reminderSound(for: .overtime)
         )
     }
 
-    private func scheduleReminders() {
+    var workSchedule: WorkdaySchedule {
+        WorkdaySchedule(timeZone: TimeZone(identifier: workTimeZone) ?? .current, weekdays: workingWeekdays,
+                        startMinutes: workStartMinutes, endMinutes: workEndMinutes,
+                        breakMinutes: breakReminderMinutes, breakDuration: breakDurationMinutes)
+    }
+
+    func setWorkTimeZone(_ identifier: String) {
+        guard TimeZone(identifier: identifier) != nil else { return }
+        workTimeZone = identifier
+        UserDefaults.standard.set(identifier, forKey: "workTimeZone")
+        scheduleReminders()
+    }
+
+    func silenceReminder(_ request: UNNotificationRequest) {
+        guard !isPreview, let owner = TimeclockReminderDelivery.owner(request) else { return }
+        workday.silence(owner: owner)
+        scheduleReminders()
+    }
+
+    func silenceCheckpoint(_ checkpoint: WorkdayCheckpoint) {
+        workday.silence(checkpoint)
+        scheduleReminders()
+    }
+
+    func scheduleReminders() {
+        guard !isPreview else { return }
+        lastReminderReconciledAt = Date()
         TimeclockReminderScheduler.schedule(
             state: state,
             workingWeekdays: workingWeekdays,
@@ -688,12 +825,51 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             breakDurationMinutes: breakDurationMinutes,
             clockOutReminderEnabled: clockOutReminderEnabled,
             workEndMinutes: workEndMinutes,
-            clockOutReminderLeadMinutes: clockOutReminderLeadMinutes
+            clockOutReminderLeadMinutes: clockOutReminderLeadMinutes,
+            workReminderSound: reminderSound(for: .workStart),
+            breakReminderSound: reminderSound(for: .breakStart),
+            breakOverReminderSound: reminderSound(for: .breakOver),
+            clockOutReminderSound: reminderSound(for: .clockOut),
+            allowsOvertime: overtimeReminderEnabled && overtimeMinutes > 0 && Self.isWorking(state),
+            overtimeReminderEnabled: overtimeReminderEnabled
         )
     }
 
     private static func savedBool(_ key: String, defaultValue: Bool) -> Bool {
         UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue
+    }
+
+    private func playReminderSoundPreview(_ sound: TimeclockReminderSound, for kind: TimeclockReminderKind) {
+        playReminderSound(sound, previewing: kind)
+    }
+
+    private func playReminderSound(_ sound: TimeclockReminderSound, previewing kind: TimeclockReminderKind?) {
+        stopReminderSound()
+
+        guard let url = Bundle.main.url(forResource: sound.rawValue, withExtension: "wav"),
+              let player = try? AVAudioPlayer(contentsOf: url) else {
+            return
+        }
+
+        player.delegate = self
+        player.play()
+        reminderSoundPreviewPlayer = player
+        previewingReminderKind = kind
+    }
+
+    private static let defaultReminderSounds = Dictionary(
+        uniqueKeysWithValues: TimeclockReminderKind.allCases.map { ($0, TimeclockReminderSound.defaultSound(for: $0)) }
+    )
+
+    private static func savedReminderSounds() -> [TimeclockReminderKind: TimeclockReminderSound] {
+        Dictionary(uniqueKeysWithValues: TimeclockReminderKind.allCases.map { kind in
+            let saved = UserDefaults.standard.string(forKey: reminderSoundDefaultsKey(for: kind))
+            return (kind, TimeclockReminderSound(rawValue: saved ?? "") ?? .defaultSound(for: kind))
+        })
+    }
+
+    private static func reminderSoundDefaultsKey(for kind: TimeclockReminderKind) -> String {
+        "\(reminderSoundDefaultsKeyPrefix)\(kind.rawValue)"
     }
 
     private static func savedMinutes(_ key: String, defaultValue: Int) -> Int {
@@ -774,8 +950,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return "clockedOut"
         case .active:
             return "active"
-        case .onBreak:
-            return "onBreak"
+        case .onBreak(let timer):
+            return TimeclockTimeMath.timerSeconds(from: timer) == nil ? "onBreakUnknownTimer" : "onBreak"
         case .unknown:
             return "unknown"
         }

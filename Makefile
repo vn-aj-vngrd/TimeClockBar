@@ -9,6 +9,7 @@ APP_PATH := $(DERIVED_DATA)/Build/Products/Release/$(APP_NAME)
 DEBUG_APP_PATH := $(DEBUG_DERIVED_DATA)/Build/Products/Debug/$(APP_NAME)
 INSTALL_DIR ?= $(HOME)/Applications
 INSTALLED_APP_PATH := $(INSTALL_DIR)/$(APP_NAME)
+APP_ARGS ?= --show-today
 PROJECT_VERSION := $(shell sed -n 's/.*MARKETING_VERSION = \([^;]*\);/\1/p' TimeClockBar.xcodeproj/project.pbxproj | head -n 1)
 BUILD_NUMBER := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -20,12 +21,13 @@ VERSION ?= $(AUTO_VERSION)
 ZIP_PATH := dist/TimeClockBar-$(VERSION)-internal.zip
 XCODE_VERSION_FLAGS := MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER)
 
-.PHONY: help version dev build run test test-version package verify quit-local install-local tag-version release clean distclean
+.PHONY: help version dev xcode build run test test-version package verify quit-local install-local tag-version release clean distclean
 
 help:
 	@echo "Time Clock Bar commands:"
 	@echo "  make version   Show app, build, and git version info"
-	@echo "  make dev       Open the Xcode project"
+	@echo "  make dev       Build Debug and open the app"
+	@echo "  make xcode     Open the Xcode project"
 	@echo "  make build     Build Debug"
 	@echo "  make run       Build Debug and open the app"
 	@echo "  make test      Run XCTest"
@@ -48,7 +50,9 @@ version:
 	@echo "Commit range: $(COMMIT_RANGE)"
 	@echo "Package: $(ZIP_PATH)"
 
-dev:
+dev: run
+
+xcode:
 	open $(PROJECT)
 
 build:
@@ -75,15 +79,17 @@ verify:
 quit-local:
 	@osascript -e 'if application id "$(BUNDLE_ID)" is running then tell application id "$(BUNDLE_ID)" to quit' || true
 	@sleep 1
+	@! pgrep -f "/Time Clock Bar.app/Contents/MacOS/Time Clock Bar( |$$)" >/dev/null || (echo "Time Clock Bar is still running. Save drafts and quit it before replacing the app."; exit 1)
 
 install-local: package verify quit-local
 	mkdir -p '$(INSTALL_DIR)'
+	@if [ -d '$(INSTALLED_APP_PATH)' ]; then ditto -c -k --keepParent '$(INSTALLED_APP_PATH)' 'dist/TimeClockBar-previous-local.zip'; fi
 	rm -rf '$(INSTALLED_APP_PATH)'
 	cp -R '$(APP_PATH)' '$(INSTALLED_APP_PATH)'
-	open '$(INSTALLED_APP_PATH)'
+	open '$(INSTALLED_APP_PATH)' --args $(APP_ARGS)
 
 tag-version:
-	@git diff --quiet || (echo "Commit version changes before tagging."; exit 1)
+	@test -z "$$(git status --porcelain)" || (echo "Commit all release changes before tagging."; exit 1)
 	@! git rev-parse -q --verify 'refs/tags/v$(VERSION)' >/dev/null || (echo "Tag v$(VERSION) already exists."; exit 1)
 	git tag -a 'v$(VERSION)' -m 'Time Clock Bar $(VERSION)'
 

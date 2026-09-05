@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     private var isAwake = true
     private var sleepObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    private var clockObservers: [NSObjectProtocol] = []
 
     private static let hotkeySignature: OSType = 0x54434248
     private static let hotkeyID: UInt32 = 1
@@ -35,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         NSApp.setActivationPolicy(.accessory)
         NSApp.applicationIconImage = Self.brandAppImage()
         UNUserNotificationCenter.current().delegate = self
-        controller.startNotifications()
+        if !controller.isPreview { controller.startNotifications() }
 
         configureStatusItem()
         configurePopover()
@@ -43,12 +44,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         bindStatusTooltip()
         bindStatusLogo()
         bindAppTheme()
-        installHotkeyHandler()
-        bindHotkey()
-        startSystemMonitoring()
+        if !controller.isPreview {
+            installHotkeyHandler()
+            bindHotkey()
+        }
+        if !controller.isPreview {
+            startSystemMonitoring()
+            controller.load()
+            updatePolling()
+        }
+        if ProcessInfo.processInfo.arguments.contains("--preview-today") || ProcessInfo.processInfo.arguments.contains("--show-today") {
+            DispatchQueue.main.async { [weak self] in self?.showPopover(page: .today) }
+        }
+    }
 
-        controller.load()
-        updatePolling()
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPopover(page: .today)
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -56,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         tooltipTimer?.invalidate()
         unregisterHotkey()
         pathMonitor.cancel()
+        clockObservers.forEach { NotificationCenter.default.removeObserver($0) }
 
         if let sleepObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver)
@@ -194,6 +207,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     }
 
     private func startSystemMonitoring() {
+        clockObservers = [NSNotification.Name.NSSystemClockDidChange, .NSSystemTimeZoneDidChange].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.controller.reload()
+            }
+        }
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification,
             object: nil,
@@ -229,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
             return
         }
 
+        if !controller.isPolling { controller.reload() }
         controller.load()
         controller.startPolling()
     }
@@ -289,6 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         menu.addItem(menuItem("Settings", #selector(openSettingsFromMenu), keyEquivalent: ","))
         menu.addItem(menuItem("About Time Clock Bar", #selector(openAboutFromMenu)))
         menu.addItem(.separator())
+        menu.addItem(menuItem("Today", #selector(openTodayFromMenu), keyEquivalent: "0"))
         menu.addItem(menuItem("Open Time Clock Bar", #selector(openTimeclockInAppFromMenu), keyEquivalent: "1"))
         menu.addItem(menuItem("Open Daily Report", #selector(openDailyReportInAppFromMenu), keyEquivalent: "2"))
         menu.addItem(.separator())
@@ -321,6 +341,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         }
     }
 
+    @objc private func openTodayFromMenu() { showPopover(page: .today) }
+
     @objc private func refreshFromMenu() {
         controller.reload()
     }
@@ -350,6 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     }
 
     private func openBrowser(url: URL) {
+        guard !controller.isPreview else { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -409,23 +432,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        switch response.actionIdentifier {
-        case TimeclockReminderScheduler.openDailyReportActionIdentifier:
-            openBrowser(url: controller.dailyReportURL)
-        case TimeclockReminderScheduler.openTimeclockActionIdentifier,
-            UNNotificationDefaultActionIdentifier:
-            showPopover()
-        case TimeclockReminderScheduler.snooze5ActionIdentifier:
-            snooze(response, minutes: 5)
-        case TimeclockReminderScheduler.snooze10ActionIdentifier:
-            snooze(response, minutes: 10)
-        case TimeclockReminderScheduler.snooze15ActionIdentifier:
-            snooze(response, minutes: 15)
-        default:
-            break
+        DispatchQueue.main.async { [self] in
+            controller.stopReminderSound()
+            if let page = TimeclockReminderScheduler.popoverPage(
+                for: response.actionIdentifier,
+                category: response.notification.request.content.categoryIdentifier
+            ) {
+                showPopover(page: page)
+            } else {
+                switch response.actionIdentifier {
+                case TimeclockReminderScheduler.stopAlarmActionIdentifier: controller.silenceReminder(response.notification.request)
+                case TimeclockReminderScheduler.snooze5ActionIdentifier: snooze(response, minutes: 5)
+                case TimeclockReminderScheduler.snooze10ActionIdentifier: snooze(response, minutes: 10)
+                case TimeclockReminderScheduler.snooze15ActionIdentifier: snooze(response, minutes: 15)
+                default: break
+                }
+            }
+            completionHandler()
         }
-
-        completionHandler()
     }
 
     func userNotificationCenter(
@@ -437,13 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     }
 
     private func snooze(_ response: UNNotificationResponse, minutes: Int) {
-        let content = response.notification.request.content
-        controller.snoozeNotification(
-            title: content.title,
-            body: content.body,
-            categoryIdentifier: content.categoryIdentifier,
-            minutes: minutes
-        )
+        controller.snoozeNotification(response.notification.request, minutes: minutes)
     }
 
     private static func carbonModifiers(from modifiers: NSEvent.ModifierFlags) -> UInt32 {

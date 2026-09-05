@@ -10,9 +10,21 @@ enum TimeclockTimeMath {
     }
 
     static func timerMinutes(from value: String) -> Int? {
-        let parts = value.replacingOccurrences(of: ".", with: ":").split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2 else { return nil }
-        return parts[0] * 60 + parts[1]
+        timerSeconds(from: value).map { $0 / 60 }
+    }
+
+    static func timerSeconds(from value: String) -> Int? {
+        let parts = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ".", with: ":")
+            .split(separator: ":", omittingEmptySubsequences: false)
+        guard (2...3).contains(parts.count),
+              parts.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) } }),
+              let hours = Int(parts[0]), hours <= (Int.max - 3599) / 3600,
+              let minutes = Int(parts[1]), (0..<60).contains(minutes) else { return nil }
+
+        let seconds = parts.count == 3 ? Int(parts[2]) : 0
+        guard let seconds, (0..<60).contains(seconds) else { return nil }
+        return hours * 3600 + minutes * 60 + seconds
     }
 
     static func shiftDurationMinutes(start: Int, end: Int) -> Int {
