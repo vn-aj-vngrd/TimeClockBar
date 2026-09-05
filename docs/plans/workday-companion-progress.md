@@ -40,3 +40,30 @@ Physical Focus/sleep/wake notification presentation and ordinary working-day use
 - Native AX/screenshot verification of the installed Release app showed Today, Time Clock, Report; Saturday's no-shift message; the next Monday shift; and normal website access (no preview restriction). No website controls were operated.
 - [Published internal release](https://github.com/vn-aj-vngrd/TimeClockBar/releases/tag/v1.2.0). Asset SHA-256: `cd22981f95957e2882c882289455564bcff7c91a5ae7f7cc400620b7cf8cf83c`; GitHub's uploaded asset digest matches the local zip.
 - The release uses local signing, not Developer ID notarization. Physical notification behavior under Focus and sleep/wake remains follow-up validation; no live attendance/report action was used as a test.
+
+### Development iteration — sound verification and settings polish (2026-09-05)
+
+User direction: keep iterating in Debug; do not publish, push, or replace the installed release in this round.
+
+- [x] Replace the centered, width-constrained Work timezone picker with the existing trailing settings menu; preserve its accessible label and selected value.
+- [x] Show a single DEV chip in Debug headers, including Settings. Remove the redundant Preview chip; preserve the paused-website message in page content.
+- [x] Enable explicit, labeled, five-second notification tests in Debug preview while retaining XCTest's real-notification guard and disabling automatic reminders/websites.
+- [x] Surface manual notification queue failures and denied permission. Regression test reproduced a swallowed error before the fix.
+- [x] Run the full hosted suite: 97 passed, zero failures/skips (`/tmp/TimeClockBarSoundTests/Logs/Test/Test-TimeClockBar-2026.09.05_15-32-18-+0800.xcresult`).
+- [x] Verify all five bundled WAV files: 29 seconds, mono, 16-bit PCM, nonzero RMS.
+- [x] Exercise real local notification delivery: macOS logged playback of pulse.wav (15:26:44), urgent.wav (15:29:03), and siren.wav (15:30:17). The user explicitly confirmed hearing Pulse.
+- [x] Background check: send Over Break, activate Finder and verify Finder is frontmost before the five-second delay expires. macOS logged urgent.wav playback at 15:34:34. This establishes OS playback; listener confirmation is recorded separately if supplied.
+- [x] Make `make dev APP_ARGS=--preview-today` rebuild, quit the prior running app, and open the fresh Debug binary. It does not install or publish a release.
+
+Evidence limits: macOS stopped one sound when the banner closed after roughly five seconds. The test verifies ordinary awake-device delivery under current settings, not Focus/sleep/wake coverage or the cause of a historical missed reminder. No live attendance/report control was operated. Queue feedback and notification delegate callbacks are not evidence that audio was heard.
+
+Final native verification: rebuilt through `make dev APP_ARGS=--preview-today`, confirmed the running executable is the repository Debug app, and inspected screenshots of Today and Settings. Only DEV remains in the header. Asia/Manila is aligned at the trailing edge alongside the other settings menus. `git diff --check` passed. Changes remain local and uncommitted; the installed v1.2.0 release is unchanged.
+
+### v1.2.1 release — authorized 2026-09-05
+
+The user has now authorized committing all changes, pushing, publishing, installing the new release, and removing older app copies. This supersedes the development-only restriction above.
+
+- [ ] Commit and push the sound diagnostics and settings fixes.
+- [ ] Re-run release tests and verify the package and hosted CI.
+- [ ] Publish v1.2.1, install it, and open the normal Release app.
+- [ ] Keep only the latest installed app; move old and duplicate bundles to Trash without deleting user data.

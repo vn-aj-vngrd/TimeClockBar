@@ -155,6 +155,7 @@ final class WorkdayCompanionTests: XCTestCase {
     func testTestHostNeverLoadsWebsites() {
         let controller = TimeclockController()
         XCTAssertTrue(controller.isPreview)
+        XCTAssertFalse(controller.canSendTestNotifications)
         controller.load()
         controller.loadDailyReport()
         controller.reload()

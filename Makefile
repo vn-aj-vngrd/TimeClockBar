@@ -60,7 +60,8 @@ build:
 
 run:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug -destination '$(DESTINATION)' -derivedDataPath $(DEBUG_DERIVED_DATA) $(XCODE_VERSION_FLAGS) build
-	open '$(DEBUG_APP_PATH)'
+	$(MAKE) quit-local
+	open -n '$(DEBUG_APP_PATH)' --args $(APP_ARGS)
 
 test:
 	xcodebuild test -project $(PROJECT) -scheme $(SCHEME) -configuration Debug -destination '$(DESTINATION)' $(XCODE_VERSION_FLAGS)

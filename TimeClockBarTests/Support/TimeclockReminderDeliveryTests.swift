@@ -228,6 +228,27 @@ final class TimeclockReminderDeliveryTests: XCTestCase {
         XCTAssertNotNil(center.pending["login-required"])
     }
 
+    func testManualNotificationFailureIsVisibleInSettings() async {
+        let center = MemoryNotificationCenter()
+        center.shouldFailAdd = true
+        let delivery = TimeclockReminderDelivery(center: center)
+
+        await delivery.send(makeRequest("test-break-reminder-example")).value
+
+        XCTAssertNotNil(delivery.lastError, "A failed sound test must not silently look successful.")
+    }
+
+    func testDeniedManualNotificationShowsWhyItDidNotSend() async {
+        let center = MemoryNotificationCenter()
+        center.authorized = false
+        let delivery = TimeclockReminderDelivery(center: center)
+
+        await delivery.send(makeRequest("test-break-reminder-example")).value
+
+        XCTAssertTrue(delivery.testStatus?.contains("blocked") == true)
+        XCTAssertTrue(center.pending.isEmpty)
+    }
+
     func testExplicitTestNotificationCanSnoozeWithoutAnActiveShift() async throws {
         let center = MemoryNotificationCenter()
         let delivery = TimeclockReminderDelivery(center: center)

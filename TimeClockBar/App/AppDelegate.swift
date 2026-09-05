@@ -457,6 +457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        TimeclockReminderScheduler.delivery.recordPresentationRequest(notification.request)
         completionHandler([.banner, .sound])
     }
 

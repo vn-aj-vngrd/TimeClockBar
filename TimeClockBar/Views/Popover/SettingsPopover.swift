@@ -171,9 +171,12 @@ struct SettingsPopover: View {
         private var notificationTestSection: some View {
             PreferenceSection("Notification Tests") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(delivery.status).font(.caption).foregroundStyle(.secondary)
+                    Text(controller.isPreview ? "Automatic reminders are paused in preview." : delivery.status).font(.caption).foregroundStyle(.secondary)
+                    if let testStatus = delivery.testStatus {
+                        Text(testStatus).font(.caption).foregroundStyle(.secondary)
+                    }
                     if let error = delivery.lastError { Text(error).font(.caption).foregroundStyle(.red) }
-                    Text("Send test")
+                    Text("Send test in 5 seconds")
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(ChromeColor.primaryText)
 
@@ -195,14 +198,18 @@ struct SettingsPopover: View {
         private func testNotificationButton(_ title: String, action: @escaping () -> Void) -> some View {
             Button(title, action: action)
                 .buttonStyle(.settingsControl)
+                .disabled(!controller.canSendTestNotifications)
         }
 
     private var appSection: some View {
         PreferenceSection("App") {
             PreferenceRow("Work timezone") {
-                Picker("Work timezone", selection: Binding(get: { controller.workTimeZone }, set: controller.setWorkTimeZone)) {
-                    ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { Text($0).tag($0) }
-                }.labelsHidden().frame(maxWidth: 240)
+                PreferenceMenuPicker(
+                    selection: Binding(get: { controller.workTimeZone }, set: controller.setWorkTimeZone),
+                    options: TimeZone.knownTimeZoneIdentifiers.map { (value: $0, label: $0) }
+                )
+                .accessibilityLabel("Work timezone")
+                .accessibilityValue(controller.workTimeZone)
             }
             if let error = controller.launchAtLoginError {
                 Text("Launch at login: \(error)").foregroundStyle(.red).padding()

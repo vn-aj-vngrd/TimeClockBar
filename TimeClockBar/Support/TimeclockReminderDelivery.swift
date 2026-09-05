@@ -47,6 +47,7 @@ final class SystemTimeclockNotificationCenter: TimeclockNotificationCenter {
 final class TimeclockReminderDelivery: ObservableObject {
     @Published private(set) var status = "Checking notification delivery…"
     @Published private(set) var lastError: String?
+    @Published private(set) var testStatus: String?
     static let ownerKey = "timeclockReminderOwner"
     static let snoozePrefix = "timeclock-snooze."
     static let overtimeOwner = "overtime-reminder"
@@ -167,15 +168,36 @@ final class TimeclockReminderDelivery: ObservableObject {
         let expectedRevision = revision
         return enqueue { [self] in
             let owner = Self.owner(request)
-            guard owner == nil || (revision == expectedRevision && isEligible(request)),
-                  await isAuthorized() else { return }
+            guard owner == nil || (revision == expectedRevision && isEligible(request)) else { return }
+            guard await isAuthorized() else {
+                if Self.isTestOwner(request.identifier) { testStatus = "Test blocked: notification authorization is unavailable. Check Permission above." }
+                return
+            }
             if owner != nil {
                 guard revision == expectedRevision else { return }
                 await add(request, expectedRevision: expectedRevision)
             } else {
-                do { try await center.add(request) }
-                catch { logger.error("Notification could not be scheduled: \(error.localizedDescription, privacy: .public)") }
+                do {
+                    try await center.add(request)
+                    lastError = nil
+                    if Self.isTestOwner(request.identifier) {
+                        testStatus = "Test queued for 5 seconds from now. Listen for the sound; switch apps to test background delivery."
+                    }
+                    let soundName = TimeclockReminderScheduler.reminderSound(from: request.content)?.fileName ?? "system default"
+                    logger.notice("Queued notification \(request.identifier, privacy: .public); sound: \(soundName, privacy: .public)")
+                } catch {
+                    lastError = error.localizedDescription
+                    if Self.isTestOwner(request.identifier) { testStatus = "Test could not be queued." }
+                    logger.error("Notification could not be scheduled: \(error.localizedDescription, privacy: .public)")
+                }
             }
+        }
+    }
+
+    func recordPresentationRequest(_ request: UNNotificationRequest) {
+        logger.notice("macOS received \(request.identifier, privacy: .public); banner and sound requested.")
+        if Self.isTestOwner(request.identifier) {
+            testStatus = "Test reached macOS; banner and sound requested. Confirm that you heard it; delivery alone cannot verify your speakers."
         }
     }
 

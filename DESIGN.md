@@ -19,6 +19,8 @@ On a day off, show “No shift today” and the next shift without a primary clo
 
 Reuse `ChromeColor`, the system font, semantic colors, native buttons and segmented controls. Use monospaced digits for countdowns. Pair colors with text/icons, retain keyboard focus and accessibility labels, and respect Reduce Motion. Avoid per-row action menus and repeated controls that turn the dashboard into another task manager.
 
+Debug builds show one compact **DEV** chip in the header on every page, including Settings. Do not add a second Preview chip; the dashboard/page body explains paused website access. Release builds omit DEV. Align the Work timezone menu with the trailing edge of the other settings controls.
+
 The websites own their forms, AI controls, and page styling. This release adds no native report window.
 
 ## Verification

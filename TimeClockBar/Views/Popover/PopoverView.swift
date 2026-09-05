@@ -80,6 +80,16 @@ struct PopoverView: View {
 
                 Spacer()
                 if page != .settings { Text("Time Clock Bar").font(.system(size: 13, weight: .semibold)) }
+                #if DEBUG
+                Text("DEV")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .foregroundStyle(ChromeColor.statusWarningText)
+                    .background(ChromeColor.statusWarningBackground, in: Capsule())
+                    .accessibilityLabel("Development build")
+                    .help("Development build · not the installed release")
+                #endif
                 if page == .settings {
                     IconButton("About", systemImage: "info.circle") {
                         openAbout()
@@ -126,7 +136,7 @@ struct PopoverView: View {
     }
 
     private var statusChipTitle: String? {
-        if controller.isPreview { return "Preview" }
+        if controller.isPreview { return nil }
         if !controller.isPolling {
             return "Offline"
         }

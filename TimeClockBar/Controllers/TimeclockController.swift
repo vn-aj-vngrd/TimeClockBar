@@ -9,7 +9,17 @@ import WebKit
 final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegate, AVAudioPlayerDelegate {
     let url = URL(string: "https://timeclock.fullscale.rocks/overview")!
     let dailyReportURL = URL(string: "https://fullscale.rocks/daily-report")!
-    let isPreview = ProcessInfo.processInfo.arguments.contains("--preview-today") || ProcessInfo.processInfo.environment["TIMECLOCKBAR_PREVIEW"] == "1" || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil
+    private static let isTestProcess = ProcessInfo.processInfo.environment["TIMECLOCKBAR_PREVIEW"] == "1" || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil
+    let isPreview = ProcessInfo.processInfo.arguments.contains("--preview-today") || isTestProcess
+
+    var canSendTestNotifications: Bool {
+        guard !Self.isTestProcess else { return false }
+        #if DEBUG
+        return true // Explicit test buttons are safe; automatic reminders stay paused in preview.
+        #else
+        return !isPreview
+        #endif
+    }
     let workday = TimeclockReminderScheduler.workday
     @Published private(set) var workTimeZone = UserDefaults.standard.string(forKey: "workTimeZone") ?? TimeZone.current.identifier
     @Published private(set) var launchAtLoginError: String?
@@ -321,56 +331,61 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func sendTestShiftReminder() {
-        guard !isPreview else { return }
+        guard canSendTestNotifications else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-shift-reminder-\(UUID().uuidString)",
-            title: "Shift starts soon",
-            body: "Your work shift starts in \(workReminderLeadMinutes) minutes.",
+            title: "Test: Shift starts soon",
+            body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            delaySeconds: 5,
             reminderSound: reminderSound(for: .workStart)
         )
     }
 
     func sendTestBreakReminder() {
-        guard !isPreview else { return }
+        guard canSendTestNotifications else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-break-reminder-\(UUID().uuidString)",
-            title: "Break reminder",
-            body: "Time for your preferred break.",
+            title: "Test: Break reminder",
+            body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            delaySeconds: 5,
             reminderSound: reminderSound(for: .breakStart)
         )
     }
 
     func sendTestBreakOverReminder() {
-        guard !isPreview else { return }
+        guard canSendTestNotifications else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-break-over-reminder-\(UUID().uuidString)",
-            title: "Over break",
-            body: "Time to end your break.",
+            title: "Test: Over break",
+            body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            delaySeconds: 5,
             reminderSound: reminderSound(for: .breakOver)
         )
     }
 
     func sendTestClockOutReminder() {
-        guard !isPreview else { return }
+        guard canSendTestNotifications else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-clock-out-reminder-\(UUID().uuidString)",
-            title: "Clock out reminder",
-            body: "Your shift ends in \(clockOutReminderLeadMinutes) minutes. Open Time Clock to clock out on time.",
+            title: "Test: Clock out reminder",
+            body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            delaySeconds: 5,
             reminderSound: reminderSound(for: .clockOut)
         )
     }
 
     func sendTestOvertimeReminder() {
-        guard !isPreview else { return }
+        guard canSendTestNotifications else { return }
         TimeclockReminderScheduler.sendNotification(
             identifier: "test-overtime-reminder-\(UUID().uuidString)",
-            title: "Overtime",
-            body: "You are over today's work-hours target. Open Time Clock to review your clock-out status.",
+            title: "Test: Overtime",
+            body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
+            delaySeconds: 5,
             reminderSound: reminderSound(for: .overtime)
         )
     }

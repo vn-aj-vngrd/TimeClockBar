@@ -30,6 +30,7 @@ The product specifications describe proposed behavior. Verify current implementa
 Time Clock and Report are live production websites. Keep them accessible in the app.
 
 - During testing, perform attendance/report behavior checks with local fixtures and the test-host preview mode.
+- Explicitly requested sound checks may use Settings → Notification Tests in a Debug preview. These send labeled local notifications only; keep automatic reminders and website actions paused. XCTest must not send real notifications.
 - Never clock in or out, start or end a break, fill or edit report fields, invoke website Improve, or submit a report as a test. Do not use real website mutations to prove a feature works.
 - Read-only inspection and loading the websites are allowed. Opening a page does not authorize operating its controls.
 - A real attendance or report action requires a separate, explicit user request for that specific action; general build, release, testing, or UX instructions are insufficient.
