@@ -63,7 +63,16 @@ Final native verification: rebuilt through `make dev APP_ARGS=--preview-today`, 
 
 The user has now authorized committing all changes, pushing, publishing, installing the new release, and removing older app copies. This supersedes the development-only restriction above.
 
-- [ ] Commit and push the sound diagnostics and settings fixes.
-- [ ] Re-run release tests and verify the package and hosted CI.
-- [ ] Publish v1.2.1, install it, and open the normal Release app.
-- [ ] Keep only the latest installed app; move old and duplicate bundles to Trash without deleting user data.
+- [x] Commit and push the sound diagnostics and settings fixes.
+- [x] Re-run release tests and verify the package and hosted CI.
+- [x] Publish v1.2.1, install it, and open the normal Release app.
+- [x] Keep only the latest installed app; move old and duplicate bundles to Trash without deleting user data.
+
+Release verification:
+
+- Release commit `ba9c6a3205106574cf571d094f34a2e38e4658cc`, tag `v1.2.1`, build 29.
+- Local release validation: 97 tests passed, zero failures/skips; version-script checks and signature verification passed. Release executable omits the DEV label; all five sound resources are bundled and under 30 seconds.
+- [Hosted CI passed](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/33959776313).
+- [Published v1.2.1](https://github.com/vn-aj-vngrd/TimeClockBar/releases/tag/v1.2.1). Uploaded archive SHA-256 matches the local artifact: `df7f9a6dde1b56aaa9ad305d3ab206a5f3add9efd3d1fee2d5f6aaab20954755`.
+- Installed and signature-verified `~/Applications/Time Clock Bar.app`; its executable matches the packaged Release build. Native inspection confirms normal Today, Time Clock, and Report navigation with no DEV/Preview label. No website controls were operated.
+- Moved four app bundles to Trash: previous installed v1.2.0, repository Debug, temporary XCTest host, and duplicate Release build. Only the installed v1.2.1 app remains in the inspected app/build locations. Settings, sessions, and local data were preserved; the current release zip is retained.
