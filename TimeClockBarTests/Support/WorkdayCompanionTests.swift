@@ -149,6 +149,38 @@ final class WorkdayCompanionTests: XCTestCase {
         XCTAssertEqual(value.actionTitle, "Open Report")
     }
 
+    func testReportCompletesOnlyAfterObservedWorkThenClockOut() {
+        let engine = WorkdayReminderController(defaults: defaults())
+        let now = date("2026-09-04T15:00:00Z")
+        for state: TimeclockState in [.clockedOut, .active("01:00"), .onBreak("00:10:00"), .stale, .unknown(nil), .loginRequired] {
+            engine.observe(state: state, schedule: schedule, now: now)
+            XCTAssertFalse(TodayDashboard.resolve(state: state, schedule: schedule,
+                checkpoints: engine.checkpoints, now: now).isReportComplete)
+        }
+        engine.observe(state: .clockedOut, schedule: schedule, now: now)
+        XCTAssertTrue(TodayDashboard.resolve(state: .clockedOut, schedule: schedule,
+            checkpoints: engine.checkpoints, now: now).isReportComplete)
+    }
+
+    func testReportCompletionSurvivesRefreshAndRestartButNotNextShift() {
+        let preferences = defaults()
+        let engine = WorkdayReminderController(defaults: preferences)
+        let now = date("2026-09-04T22:50:00Z") // Saturday morning, still Friday's shift
+        engine.observe(state: .active("08:00"), schedule: schedule, now: now)
+        engine.observe(state: .clockedOut, schedule: schedule, now: now)
+        let restarted = WorkdayReminderController(defaults: preferences)
+        restarted.observe(state: .stale, schedule: schedule, now: now.addingTimeInterval(900))
+        XCTAssertTrue(TodayDashboard.resolve(state: .stale, schedule: schedule,
+            checkpoints: restarted.checkpoints, now: now.addingTimeInterval(900)).isReportComplete)
+        let nextShift = date("2026-09-07T13:00:00Z")
+        // A view tick can select the next shift before the next observation updates the ledger.
+        XCTAssertFalse(TodayDashboard.resolve(state: .clockedOut, schedule: schedule,
+            checkpoints: restarted.checkpoints, now: nextShift).isReportComplete)
+        restarted.observe(state: .clockedOut, schedule: schedule, now: nextShift)
+        XCTAssertFalse(TodayDashboard.resolve(state: .clockedOut, schedule: schedule,
+            checkpoints: restarted.checkpoints, now: nextShift).isReportComplete)
+    }
+
     func testBreakReturnTakesPriorityOverWrapUp() {
         let value = TodayDashboard.resolve(state: .onBreak("00:55:30"), schedule: schedule, checkpoints: [], now: date("2026-09-04T22:40:00Z"))
         XCTAssertEqual(value.phase, .onBreak)

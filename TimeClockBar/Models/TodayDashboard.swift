@@ -1,6 +1,6 @@
 import Foundation
 
-/// Chooses a useful destination without performing or claiming a website action.
+/// Presents shift progress and destinations without performing website actions.
 struct TodayDashboard {
     enum Phase { case offDay, upcoming, working, breakTime, onBreak, wrapUp, finished, unavailable }
     let phase: Phase
@@ -9,9 +9,23 @@ struct TodayDashboard {
     let actionTitle: String?
     let destination: PopoverPage?
     let deadline: Date?
+    private(set) var isReportComplete = false
 
     static func resolve(state: TimeclockState, schedule: WorkdaySchedule,
                         checkpoints: [WorkdayCheckpoint], now: Date) -> Self {
+        var dashboard = presentation(state: state, schedule: schedule, checkpoints: checkpoints, now: now)
+        if let shift = schedule.currentShift(at: now) {
+            // The website requires a filed report before clock-out. Reuse confirmed shift
+            // completion, not a bare clocked-out status that could precede the workday.
+            dashboard.isReportComplete = checkpoints.contains {
+                $0.id == "\(shift.id)|clockOut" && $0.kind == .clockOut && $0.isComplete
+            }
+        }
+        return dashboard
+    }
+
+    private static func presentation(state: TimeclockState, schedule: WorkdaySchedule,
+                                     checkpoints: [WorkdayCheckpoint], now: Date) -> Self {
         let shift = schedule.currentShift(at: now)
         let working: Bool
         switch state { case .active, .onBreak: working = true; default: working = false }

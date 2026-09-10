@@ -162,3 +162,12 @@ Computer Use inspection remained unapproved; verification used user screenshots,
 - [x] Installed runtime recorded `Refresh keeps last confirmed display: clockedOut` at 01:24:12 and verified `clockedOut` again at 01:24:26. No unavailable transition occurred during that observed refresh. Evidence: `/tmp/timeclock-v124-runtime.log`.
 
 Native visual inspection remains unapproved; these checks use the shared display policy and installed runtime diagnostics. No production attendance/report controls or test notifications were operated.
+
+### Report checklist completion — 2026-09-11
+
+- [x] User confirmed that the website already requires filing the report before clock-out; implement checklist completion using that prerequisite.
+- [x] Reproduce the static report row with two failing regression tests, then show a green check and Complete when the selected shift's persisted clock-out checkpoint is complete.
+- [x] Verify pre-shift out, working, break, stale, unknown, and login-required observations do not complete the report; observed work followed by clock-out does. Verify completion survives refresh/restart and stays scoped to the work date, including overnight shifts and a view tick before the ledger advances.
+- [x] Full local suite: **137 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_01-33-48-+0800.xcresult`; log: `/tmp/timeclock-report-tests.log`.
+
+The website retains report enforcement. No production attendance/report actions or real notification tests were performed.

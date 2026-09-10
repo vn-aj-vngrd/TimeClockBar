@@ -76,7 +76,7 @@ Diagnostics show the next pending checkpoint, last reconciliation, permission st
 | Clock in at 12:00 for a 14:50 shift | Complete today's clock-in even more than an hour early; no 14:50 alert after restart |
 | Already on break with an unreadable timer | Cancel start-break alerts immediately; wait for a valid timer before planning return |
 | Return from break before its deadline | Cancel break-return alerts and snoozes; retain clock-out reminders |
-| Snooze clock-out, then clock out | Pending snooze and due alerts disappear; no report submission is inferred |
+| Snooze clock-out, then clock out | Pending snooze and due alerts disappear; Today checks File report for that shift using the user-confirmed website prerequisite |
 | Clocked out at preferred break time | No claim that a break must start; show the actual next actionable checkpoint |
 | Main break completed before its preferred time | The associated planned-break checkpoint stays complete after resume/restart |
 | Break begins at 20:02:45 for 60 minutes | Due at 21:02:45; elapsed seconds do not round the deadline forward |

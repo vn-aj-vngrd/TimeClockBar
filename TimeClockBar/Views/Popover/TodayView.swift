@@ -51,10 +51,13 @@ struct TodayView: View {
                                 scheduleRow("End break", at: checkpoint.due, kind: .breakOver)
                             }
                             HStack {
-                                Image(systemName: "doc.text").foregroundStyle(.secondary).frame(width: 18)
+                                Image(systemName: dashboard.isReportComplete ? "checkmark.circle.fill" : "doc.text")
+                                    .foregroundStyle(dashboard.isReportComplete ? .green : .secondary).frame(width: 18)
+                                    .accessibilityLabel(dashboard.isReportComplete ? "Complete after clock-out" : "Pending")
                                 Text("File report")
                                 Spacer()
-                                Text("Before clock-out").font(.caption).foregroundStyle(.secondary)
+                                Text(dashboard.isReportComplete ? "Complete" : "Before clock-out")
+                                    .font(.caption).foregroundStyle(.secondary)
                             }
                             scheduleRow("Clock out", at: shift.end, kind: .clockOut)
                         }
