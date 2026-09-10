@@ -136,3 +136,17 @@ The installed app remains unchanged. Completion-aware cancellation requires a fr
 - [ ] GitHub Release binary publication was not performed: automatic approval review rejected dispatching the release workflow because binary publication was considered separate authorization from committing, pushing, and installing locally. The local 1.2.2 package and installation are complete.
 
 Logs: `/tmp/timeclock-v122-tests.log`, `/tmp/timeclock-v122-package.log`, `/tmp/timeclock-v122-install.log`. Native visual/Focus/sleep-wake and listener-confirmed sound gates remain unobserved; no production attendance/report controls were operated.
+
+### Checking-loop hotfix — 2026-09-11
+
+- [x] Reproduce the installed failure from WebKit logs: seven reload cycles each performed only one JavaScript read. The pending reload guard blocked reading controls rendered after the initial document load.
+- [x] Reproduce the same recovery-policy failure locally, then allow reads during reload backoff. Verified observations cancel fallback reloads; provisional/failed navigations still cannot reuse old documents.
+- [x] Read committed documents while secondary resources load and cancel the navigation watchdog once clock state is verified. Give unknown asynchronous content at least thirty seconds to render while reads continue.
+- [x] Reproduce/fix split-seconds parsing using the publicly served clock-component structure. `02:55. 45` now becomes `02:55.45`.
+- [x] Reproduce/fix disabled attendance controls being treated as confirmed state during session hydration. They cannot confirm clock-out, clock-in, or break completion.
+- [x] Final suite: **133 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_00-12-55-+0800.xcresult`; log: `/tmp/timeclock-checking-stable-tests.log`.
+- [x] Commit and push code fixes `86791f9` and `16e94f1`; install and open **1.2.3, build 34** at `~/Applications/Time Clock Bar.app`. Used explicit `VERSION=1.2.3` because the prior local 1.2.2 was not tagged/published.
+- [x] Verify installed signature and package. Archive SHA-256: `6d0b4ff946ac6809d3fdf894f19c401058b3afbacf78e3e7f2710a64d809edf9`; install log: `/tmp/timeclock-v123-final-install.log`.
+- [x] Verify the installed final process reports `Clock observation recovered: active` at 00:14:35 and again at 00:15:01 after a background refresh, with continuing successful reads. Evidence: `/tmp/timeclock-v123-final-runtime.log`. The earlier false clocked-out hydration transition is absent in this final observed interval.
+
+Computer Use inspection remained unapproved; verification used user screenshots, public frontend source, local fixtures, and bounded runtime diagnostics. No production attendance/report actions were operated. These observations establish recovery from this loop, not full-shift or Focus/sleep-wake coverage. GitHub binary publication remains outside the approved release action.
