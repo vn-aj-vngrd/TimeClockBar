@@ -17,6 +17,8 @@ On a day off, show “No shift today” and the next shift without a primary clo
 
 After confirmed clock-out, make the next scheduled shift the main content immediately, with a fresh checklist. Keep the previous work date's report/clock-out confirmation in a compact secondary summary, including the observation time when known. Label overnight shifts with both dates. Midnight and temporary Checking states must not complete an unfinished shift. The menu bar continues to reflect actual attendance independently of which shift Today displays.
 
+Keep the observation footer quiet: “Observed 1:48 PM,” using the work timezone and system time format. Add the date for an older calendar day. Show “Refreshing,” “Update delayed,” or “Sign in required” alongside the unchanged observation timestamp as appropriate. Hover and VoiceOver expose the exact date/time with seconds, timezone, elapsed age, and connection details. The timestamp means the loaded page was successfully read; it does not confirm a fresh server update. Work/break timers keep ticking, while the visible observation label has no ticking elapsed seconds.
+
 ## Native conventions
 
 Reuse `ChromeColor`, the system font, semantic colors, native buttons and segmented controls. Use monospaced digits for countdowns. Pair colors with text/icons, retain keyboard focus and accessibility labels, and respect Reduce Motion. Avoid per-row action menus and repeated controls that turn the dashboard into another task manager.

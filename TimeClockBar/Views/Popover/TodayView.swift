@@ -77,13 +77,19 @@ struct TodayView: View {
                         }
                     }
                     Divider()
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: controller.isPreview ? "eye" : "info.circle")
-                        Text(controller.isPreview ? "Local preview · website access paused" : controller.connectionStatus)
+                    if controller.isPreview {
+                        Label("Local preview · website access paused", systemImage: "eye")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        let observation = TimeclockObservationLabel.resolve(
+                            observedAt: controller.lastRefreshedAt, state: controller.state,
+                            isRefreshing: controller.isRefreshing, connectionStatus: controller.connectionStatus,
+                            now: context.date, timeZone: controller.workSchedule.timeZone)
+                        Label(observation.title, systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                    }.font(.caption).foregroundStyle(.secondary)
-                    if let observed = controller.lastRefreshedAt {
-                        Text("Last observed \(observed, style: .relative) ago").font(.caption).foregroundStyle(.secondary)
+                            .help(observation.help)
+                            .accessibilityValue(observation.help)
                     }
                     if let error = workday.persistenceError { Text(error).font(.caption).foregroundStyle(.red) }
                 }.padding(22)

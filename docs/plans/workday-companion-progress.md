@@ -186,3 +186,12 @@ The website retains report enforcement. No production attendance/report actions 
 - [x] Hosted CI build and tests passed for the release commit: [run 34510327479](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34510327479).
 
 No production attendance/report actions or real notification tests were performed. Native visual inspection remains unapproved; dashboard behavior is verified through the model consumed by TodayView, with existing platform gates still pending.
+
+### Compact observation timestamp — 2026-09-11
+
+- [x] Replace the ticking Last observed footer with a fixed time in the configured work timezone; include the date when the observation belongs to another calendar day.
+- [x] Preserve the successful-read timestamp during routine refreshes, failure, and login expiry. Show short Refreshing, Update delayed, and Sign in required states without inventing a timestamp before the first successful observation.
+- [x] Expose the full date/time with seconds, timezone, elapsed age, and connection details through native help and VoiceOver. Keep preview wording, work/break timer updates, polling cadence, and authoritative observation ownership unchanged.
+- [x] Four formatting/state tests plus existing observation regressions passed. Full suite: **147 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_02-10-32-+0800.xcresult`; log: `/tmp/timeclock-observation-label-full-tests.log`. Whitespace check passed.
+
+Native tooltip/VoiceOver presentation has not been visually or interactively verified; native app inspection remains unapproved. No production attendance/report actions or real notification tests were performed.
