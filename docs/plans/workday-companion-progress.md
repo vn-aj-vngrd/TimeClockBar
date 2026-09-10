@@ -169,5 +169,7 @@ Native visual inspection remains unapproved; these checks use the shared display
 - [x] Reproduce the static report row with two failing regression tests, then show a green check and Complete when the selected shift's persisted clock-out checkpoint is complete.
 - [x] Verify pre-shift out, working, break, stale, unknown, and login-required observations do not complete the report; observed work followed by clock-out does. Verify completion survives refresh/restart and stays scoped to the work date, including overnight shifts and a view tick before the ledger advances.
 - [x] Full local suite: **137 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_01-33-48-+0800.xcresult`; log: `/tmp/timeclock-report-tests.log`.
+- [x] Commit and push `fb19afc`; package, signature-verify, replace the installed app, and open **1.2.5, build 38** at `~/Applications/Time Clock Bar.app`. Confirm installed metadata and the running executable with `--show-today`.
+- [x] Package SHA-256: `3769ebb0e99200e624198be3d9adc5043931e98e62987f2b1e8680f4d477d9ea`. Install log: `/tmp/timeclock-v125-install.log`. Previous installed bundle retained in the installer's backup zip; settings and website data preserved.
 
 The website retains report enforcement. No production attendance/report actions or real notification tests were performed.
