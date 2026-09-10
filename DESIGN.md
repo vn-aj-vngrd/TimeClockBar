@@ -13,7 +13,9 @@ Keep the existing 460 × 640 popover. Use a short dashboard with:
 3. A compact shift schedule, with “File report” before “Clock out.”
 4. Brief clock-status feedback when needed.
 
-On a day off, show “No shift today” and the next shift without a primary clock-in button. While on break, prioritize returning from break. Within 30 minutes of shift end, show “Report, then clock out,” with Open Report first and Time Clock second. Report submission status is owned by Full Scale; do not show a fabricated completion check.
+On a day off, show “No shift today” and the next shift without a primary clock-in button. While on break, prioritize returning from break. Within 30 minutes of shift end, show “Report, then clock out,” with Open Report first and Time Clock second. Report submission remains owned by Full Scale. The user confirms the website requires filing it before clock-out, so a confirmed completed shift can show its report checked; opening Report never establishes completion.
+
+After confirmed clock-out, make the next scheduled shift the main content immediately, with a fresh checklist. Keep the previous work date's report/clock-out confirmation in a compact secondary summary, including the observation time when known. Label overnight shifts with both dates. Midnight and temporary Checking states must not complete an unfinished shift. The menu bar continues to reflect actual attendance independently of which shift Today displays.
 
 ## Native conventions
 

@@ -173,3 +173,13 @@ Native visual inspection remains unapproved; these checks use the shared display
 - [x] Package SHA-256: `3769ebb0e99200e624198be3d9adc5043931e98e62987f2b1e8680f4d477d9ea`. Install log: `/tmp/timeclock-v125-install.log`. Previous installed bundle retained in the installer's backup zip; settings and website data preserved.
 
 The website retains report enforcement. No production attendance/report actions or real notification tests were performed.
+
+### Overnight completion and next-shift dashboard — 2026-09-11
+
+- [x] Reproduce a 15:00 shift clocked out at 00:01 showing the completed shift instead of the next afternoon. Keep the reminder recovery window while advancing Today's displayed shift and filtering its checklist by work date.
+- [x] Keep unfinished work/breaks attached to their original shift across midnight, including unverified observations and restart. Show both dates on overnight shift headings.
+- [x] Preserve a compact previous-shift report/clock-out confirmation after restart. Add an optional first clock-out observation timestamp to existing ledger records; repeated observations do not rewrite it, and legacy records do not receive an invented time.
+- [x] Add six regression tests covering 00:01 completion, restart after the recovery window, unfinished work/breaks across midnight, early next-shift clock-in/reminder eligibility, Friday completion followed by days off, and legacy completed history. Update report tests to check the completed summary while keeping the next report pending.
+- [x] Full XCTest suite: **143 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_01-44-25-+0800.xcresult`; log: `/tmp/timeclock-rollover-full-tests.log`. Whitespace check passed.
+
+No production attendance/report actions or real notification tests were performed. Native visual inspection remains unapproved; dashboard behavior is verified through the model consumed by TodayView, with existing platform gates still pending.

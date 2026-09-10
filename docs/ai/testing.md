@@ -1,5 +1,7 @@
 # Testing
 
+`WorkdayCompanionTests` exercises a 15:00 shift completed at 00:01 the next day: Today advances to the next afternoon with a fresh checklist and a separate completed report/clock-out summary. It also covers midnight while working/on break/unverified, restart beyond the recovery window, early next-shift clock-in and reminder eligibility, Friday-to-Saturday completion, and legacy records without a confirmation timestamp. These tests use local observations and isolated defaults only.
+
 The checking-loop regression uses `TimeclockPageRecoveryTests` and a local WebKit fixture that renders attendance controls after navigation finishes. It verifies that a pending fallback reload allows a new read, fresh state cancels recovery, failed/provisional navigations remain blocked, committed documents can be read while secondary resources load, and repeated unknown reads do not postpone the deadline. Disabled controls during hydration must not confirm clock-in/out or break state. A floating-panel fixture mirrors the publicly served Full Scale component's separate seconds span, which must parse `02:55. 45` as `02:55.45`.
 
 `TimeclockObservationTests` also verifies that routine refresh display preserves clocked-out, active, and break states without changing the observation timestamp. Missing/old observations, backwards clock changes, ended refresh grace, and login-required state must not display cached attendance. Runtime reminder planning continues to receive the unverified `state`, never `displayState`.

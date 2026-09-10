@@ -57,6 +57,13 @@ struct WorkdaySchedule {
     }
 }
 
+/// A confirmed completed work date. The timestamp records observation, not a website receipt.
+struct WorkdayCompletion: Equatable {
+    let id: String
+    let workDate: String
+    let observedAt: Date?
+}
+
 struct WorkdayCheckpoint: Identifiable, Equatable {
     let id: String
     let kind: TimeclockReminderKind

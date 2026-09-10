@@ -6,6 +6,7 @@ final class WorkdayReminderController: ObservableObject {
     struct Record: Codable, Equatable {
         var seenWorking = false
         var clockedOut = false
+        var clockedOutAt: Date?
         var hasStartedBreak: Bool?
         var breakStartedAt: Date?
         var breakReturned = false
@@ -16,6 +17,7 @@ final class WorkdayReminderController: ObservableObject {
     @Published private(set) var checkpoints: [WorkdayCheckpoint] = []
     @Published private(set) var shift: WorkdaySchedule.Shift?
     @Published private(set) var persistenceError: String?
+    @Published private(set) var lastCompletedShift: WorkdayCompletion?
     private var records: [String: Record]
     private let defaults: UserDefaults
     private let key = "workdayCheckpointLedger.v1"
@@ -26,6 +28,7 @@ final class WorkdayReminderController: ObservableObject {
             do { records = try JSONDecoder().decode([String: Record].self, from: data) }
             catch { records = [:]; persistenceError = "Reminder history is unreadable. Automatic reminders are paused; the saved history has been preserved." }
         } else { records = [:] }
+        updateLastCompletedShift()
     }
 
     func observe(state: TimeclockState, schedule: WorkdaySchedule, now: Date = Date()) {
@@ -54,7 +57,10 @@ final class WorkdayReminderController: ObservableObject {
                     record.breakStartedAt = now.addingTimeInterval(-Double(elapsed))
                 }
             case .clockedOut:
-                if record.seenWorking { record.clockedOut = true }
+                if record.seenWorking, !record.clockedOut {
+                    record.clockedOut = true
+                    record.clockedOutAt = now
+                }
             case .loading, .stale, .loginRequired, .unknown: break
             }
         }
@@ -208,7 +214,18 @@ final class WorkdayReminderController: ObservableObject {
     }
 
     private func persist() {
+        updateLastCompletedShift()
         do { defaults.set(try JSONEncoder().encode(records), forKey: key) }
         catch { persistenceError = "Reminder history could not be saved. \(error.localizedDescription)" }
+    }
+
+    private func updateLastCompletedShift() {
+        let completed = records.compactMap { id, record -> WorkdayCompletion? in
+            guard record.seenWorking, record.clockedOut else { return nil }
+            let parts = id.components(separatedBy: "|")
+            guard parts.count == 2 else { return nil }
+            return WorkdayCompletion(id: id, workDate: parts[1], observedAt: record.clockedOutAt)
+        }.max { $0.workDate < $1.workDate }
+        if completed != lastCompletedShift { lastCompletedShift = completed }
     }
 }

@@ -142,6 +142,113 @@ final class WorkdayCompanionTests: XCTestCase {
         XCTAssertNil(value.destination)
     }
 
+    func testClockOutAfterMidnightShowsNextAfternoonShift() {
+        let afternoon = WorkdaySchedule(timeZone: schedule.timeZone, weekdays: [2,3,4,5,6],
+            startMinutes: 15 * 60, endMinutes: 0, breakMinutes: 20 * 60, breakDuration: 60)
+        let engine = WorkdayReminderController(defaults: defaults())
+        engine.observe(state: .active("08:59"), schedule: afternoon, now: date("2026-09-07T15:59:00Z"))
+        let now = date("2026-09-07T16:01:00Z") // Tuesday 00:01 Manila
+        engine.observe(state: .clockedOut, schedule: afternoon, now: now)
+        let value = TodayDashboard.resolve(state: .clockedOut, schedule: afternoon,
+            checkpoints: engine.checkpoints, now: now)
+        XCTAssertEqual(value.phase, .upcoming)
+        XCTAssertEqual(value.deadline, date("2026-09-08T07:00:00Z"))
+        XCTAssertEqual(value.title, "Your next shift")
+        XCTAssertEqual(value.shift?.workDate, "2026-09-08")
+        XCTAssertTrue(value.checkpoints.isEmpty)
+        XCTAssertEqual(value.previousShift?.workDate, "2026-09-07")
+        XCTAssertFalse(value.isReportComplete)
+    }
+
+    func testCompletedShiftSummarySurvivesRestartAfterRecoveryWindow() {
+        let preferences = defaults()
+        let afternoon = WorkdaySchedule(timeZone: schedule.timeZone, weekdays: [2,3,4,5,6],
+            startMinutes: 15 * 60, endMinutes: 0, breakMinutes: 20 * 60, breakDuration: 60)
+        let engine = WorkdayReminderController(defaults: preferences)
+        engine.observe(state: .active("08:59"), schedule: afternoon, now: date("2026-09-07T15:59:00Z"))
+        let clockOut = date("2026-09-07T16:01:00Z")
+        engine.observe(state: .clockedOut, schedule: afternoon, now: clockOut)
+        engine.observe(state: .clockedOut, schedule: afternoon, now: clockOut.addingTimeInterval(60))
+        let restarted = WorkdayReminderController(defaults: preferences)
+        let morning = date("2026-09-08T00:00:00Z") // 08:00 Tuesday, old recovery window has ended
+        restarted.observe(state: .stale, schedule: afternoon, now: morning)
+        let value = TodayDashboard.resolve(state: .stale, schedule: afternoon,
+            checkpoints: restarted.checkpoints, now: morning, lastCompletedShift: restarted.lastCompletedShift)
+        XCTAssertEqual(value.shift?.workDate, "2026-09-08")
+        XCTAssertEqual(value.previousShift?.workDate, "2026-09-07")
+        XCTAssertEqual(value.previousShift?.observedAt, clockOut)
+        XCTAssertFalse(value.checkpoints.contains { $0.isComplete })
+        XCTAssertFalse(value.isReportComplete)
+    }
+
+    func testMidnightDoesNotResetAnUnfinishedShiftOrBreak() {
+        let afternoon = WorkdaySchedule(timeZone: schedule.timeZone, weekdays: [2,3,4,5,6],
+            startMinutes: 15 * 60, endMinutes: 0, breakMinutes: 20 * 60, breakDuration: 60)
+        let preferences = defaults()
+        let engine = WorkdayReminderController(defaults: preferences)
+        engine.observe(state: .active("08:59"), schedule: afternoon, now: date("2026-09-07T15:59:00Z"))
+        let now = date("2026-09-07T16:01:00Z")
+        for state: TimeclockState in [.active("09:01"), .onBreak("00:05:00"), .stale, .unknown(nil), .loginRequired] {
+            let restarted = WorkdayReminderController(defaults: preferences)
+            restarted.observe(state: state, schedule: afternoon, now: now)
+            let value = TodayDashboard.resolve(state: state, schedule: afternoon,
+                checkpoints: restarted.checkpoints, now: now, lastCompletedShift: restarted.lastCompletedShift)
+            XCTAssertEqual(value.shift?.workDate, "2026-09-07")
+            XCTAssertTrue(value.checkpoints.first { $0.kind == .workStart }?.isComplete == true)
+            XCTAssertFalse(value.isReportComplete)
+            XCTAssertNil(value.previousShift)
+            if case .onBreak = state { XCTAssertEqual(value.phase, .onBreak) }
+        }
+    }
+
+    func testEarlyClockInForNextShiftStartsItsOwnChecklist() {
+        let afternoon = WorkdaySchedule(timeZone: schedule.timeZone, weekdays: [2,3,4,5,6],
+            startMinutes: 15 * 60, endMinutes: 0, breakMinutes: 20 * 60, breakDuration: 60)
+        let engine = WorkdayReminderController(defaults: defaults())
+        engine.observe(state: .active("08:59"), schedule: afternoon, now: date("2026-09-07T15:59:00Z"))
+        engine.observe(state: .clockedOut, schedule: afternoon, now: date("2026-09-07T16:01:00Z"))
+        let early = date("2026-09-08T06:00:00Z") // Tuesday 14:00, an hour before the next shift
+        let plans = engine.plans(schedule: afternoon, state: .active("00:01"), enabled: [.workStart, .clockOut],
+            sounds: [:], workLead: 15, endLead: 15, now: early).plans
+        let value = TodayDashboard.resolve(state: .active("00:01"), schedule: afternoon,
+            checkpoints: engine.checkpoints, now: early, lastCompletedShift: engine.lastCompletedShift)
+        XCTAssertEqual(value.phase, .working)
+        XCTAssertEqual(value.shift?.workDate, "2026-09-08")
+        XCTAssertTrue(value.checkpoints.first { $0.kind == .workStart }?.isComplete == true)
+        XCTAssertFalse(value.checkpoints.first { $0.kind == .clockOut }?.isComplete == true)
+        XCTAssertFalse(value.isReportComplete)
+        XCTAssertNil(value.previousShift)
+        XCTAssertFalse(plans.contains { $0.ownerIdentifier == "Asia/Manila|2026-09-08|workStart" })
+        XCTAssertTrue(plans.contains { $0.ownerIdentifier == "Asia/Manila|2026-09-08|clockOut" })
+    }
+
+    func testFridayClockOutAfterMidnightShowsMondayWithoutClockInPrompt() {
+        let afternoon = WorkdaySchedule(timeZone: schedule.timeZone, weekdays: [2,3,4,5,6],
+            startMinutes: 15 * 60, endMinutes: 0, breakMinutes: 20 * 60, breakDuration: 60)
+        let engine = WorkdayReminderController(defaults: defaults())
+        engine.observe(state: .active("08:59"), schedule: afternoon, now: date("2026-09-11T15:59:00Z"))
+        let now = date("2026-09-11T16:01:00Z")
+        engine.observe(state: .clockedOut, schedule: afternoon, now: now)
+        let value = TodayDashboard.resolve(state: .clockedOut, schedule: afternoon,
+            checkpoints: engine.checkpoints, now: now, lastCompletedShift: engine.lastCompletedShift)
+        XCTAssertEqual(value.phase, .offDay)
+        XCTAssertEqual(value.shift?.workDate, "2026-09-14")
+        XCTAssertEqual(value.previousShift?.workDate, "2026-09-11")
+        XCTAssertEqual(value.deadline, date("2026-09-14T07:00:00Z"))
+        XCTAssertNil(value.actionTitle)
+        XCTAssertTrue(value.checkpoints.isEmpty)
+    }
+
+    func testLegacyCompletedShiftHasNoInventedConfirmationTime() {
+        let preferences = defaults()
+        let legacy = #"{"Asia/Manila|2026-09-07":{"seenWorking":true,"clockedOut":true,"breakReturned":true,"silenced":[],"scheduledEvents":[]}}"#
+        preferences.set(Data(legacy.utf8), forKey: "workdayCheckpointLedger.v1")
+        let engine = WorkdayReminderController(defaults: preferences)
+        XCTAssertEqual(engine.lastCompletedShift?.workDate, "2026-09-07")
+        XCTAssertNil(engine.lastCompletedShift?.observedAt)
+        XCTAssertNil(engine.persistenceError)
+    }
+
     func testWrapUpOpensReportBeforeTimeClock() {
         let value = TodayDashboard.resolve(state: .active("08:00"), schedule: schedule, checkpoints: [], now: date("2026-09-04T22:40:00Z"))
         XCTAssertEqual(value.phase, .wrapUp)
@@ -158,8 +265,10 @@ final class WorkdayCompanionTests: XCTestCase {
                 checkpoints: engine.checkpoints, now: now).isReportComplete)
         }
         engine.observe(state: .clockedOut, schedule: schedule, now: now)
-        XCTAssertTrue(TodayDashboard.resolve(state: .clockedOut, schedule: schedule,
-            checkpoints: engine.checkpoints, now: now).isReportComplete)
+        let completed = TodayDashboard.resolve(state: .clockedOut, schedule: schedule,
+            checkpoints: engine.checkpoints, now: now)
+        XCTAssertEqual(completed.previousShift?.workDate, "2026-09-04")
+        XCTAssertFalse(completed.isReportComplete) // The next shift's report is still pending.
     }
 
     func testReportCompletionSurvivesRefreshAndRestartButNotNextShift() {
@@ -170,8 +279,10 @@ final class WorkdayCompanionTests: XCTestCase {
         engine.observe(state: .clockedOut, schedule: schedule, now: now)
         let restarted = WorkdayReminderController(defaults: preferences)
         restarted.observe(state: .stale, schedule: schedule, now: now.addingTimeInterval(900))
-        XCTAssertTrue(TodayDashboard.resolve(state: .stale, schedule: schedule,
-            checkpoints: restarted.checkpoints, now: now.addingTimeInterval(900)).isReportComplete)
+        let completed = TodayDashboard.resolve(state: .stale, schedule: schedule,
+            checkpoints: restarted.checkpoints, now: now.addingTimeInterval(900))
+        XCTAssertEqual(completed.previousShift?.workDate, "2026-09-04")
+        XCTAssertFalse(completed.isReportComplete)
         let nextShift = date("2026-09-07T13:00:00Z")
         // A view tick can select the next shift before the next observation updates the ledger.
         XCTAssertFalse(TodayDashboard.resolve(state: .clockedOut, schedule: schedule,
