@@ -19,7 +19,10 @@ Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Cloc
 - System, light, and dark app themes.
 - Settings reset for display settings or all app defaults.
 - About window with app version, build number, creator link, and repository link.
-- Offline and sleep-aware polling pause/resume, with stale status handling and last-refreshed tooltip.
+- Scoped status detection with ten-second fallback reads, locally ticking timers, and last-known status during reconnects.
+- Automatic recovery from failed navigation, stalled reads, and WebKit restarts; active-session monitoring allows normal Mac sleep.
+- Ten-second sounds by default, optional twenty-second overdue break/clock-out sounds, and visible notification queue health.
+- Offline and sleep-aware polling pause/resume, with stale status handling and last-observed tooltip.
 
 ## Requirements
 

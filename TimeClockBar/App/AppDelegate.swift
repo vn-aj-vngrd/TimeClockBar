@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     }
 
     private func bindStatusTitle() {
-        stateCancellable = controller.$menuBarTitle
+        stateCancellable = controller.menuBarTitles.prepend(controller.menuBarTitle)
             .receive(on: RunLoop.main)
             .sink { [weak self] title in
                 self?.statusItem?.button?.title = self?.statusTitle(title) ?? title

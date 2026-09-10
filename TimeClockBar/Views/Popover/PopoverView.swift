@@ -165,9 +165,10 @@ struct PopoverView: View {
         switch controller.statusIndicator {
         case .overBreak where controller.isPolling && controller.state != .stale:
             return ChromeColor.statusDangerBackground
-        case .overtime where controller.isPolling && controller.state != .stale:
+        case .overtime where controller.isPolling && controller.state != .stale,
+             .pastShiftEnd where controller.isPolling && controller.state != .stale:
             return ChromeColor.statusWarningBackground
-        case .none, .overtime, .overBreak:
+        case .none, .overtime, .overBreak, .pastShiftEnd:
             return ChromeColor.headerControlBackground
         }
     }
@@ -176,9 +177,10 @@ struct PopoverView: View {
         switch controller.statusIndicator {
         case .overBreak where controller.isPolling && controller.state != .stale:
             return ChromeColor.statusDangerText
-        case .overtime where controller.isPolling && controller.state != .stale:
+        case .overtime where controller.isPolling && controller.state != .stale,
+             .pastShiftEnd where controller.isPolling && controller.state != .stale:
             return ChromeColor.statusWarningText
-        case .none, .overtime, .overBreak:
+        case .none, .overtime, .overBreak, .pastShiftEnd:
             return ChromeColor.primaryText
         }
     }
@@ -187,9 +189,10 @@ struct PopoverView: View {
         switch controller.statusIndicator {
         case .overBreak where controller.isPolling && controller.state != .stale:
             return ChromeColor.statusDangerStroke
-        case .overtime where controller.isPolling && controller.state != .stale:
+        case .overtime where controller.isPolling && controller.state != .stale,
+             .pastShiftEnd where controller.isPolling && controller.state != .stale:
             return ChromeColor.statusWarningStroke
-        case .none, .overtime, .overBreak:
+        case .none, .overtime, .overBreak, .pastShiftEnd:
             return ChromeColor.headerControlStroke
         }
     }

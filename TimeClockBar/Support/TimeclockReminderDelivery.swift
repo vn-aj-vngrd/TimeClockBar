@@ -48,6 +48,8 @@ final class TimeclockReminderDelivery: ObservableObject {
     @Published private(set) var status = "Checking notification delivery…"
     @Published private(set) var lastError: String?
     @Published private(set) var testStatus: String?
+    @Published private(set) var lastReconciledAt: Date?
+    @Published private(set) var nextReminderAt: Date?
     static let ownerKey = "timeclockReminderOwner"
     static let snoozePrefix = "timeclock-snooze."
     static let overtimeOwner = "overtime-reminder"
@@ -81,6 +83,7 @@ final class TimeclockReminderDelivery: ObservableObject {
         eligibleOwners = activeOwners ?? Set(plans.map { $0.ownerIdentifier ?? $0.identifier })
         if allowsOvertime { eligibleOwners.insert(Self.overtimeOwner) }
         eligibleSnoozeOwners = unverifiedSnoozeOwners ?? eligibleOwners
+        if allowsOvertime { eligibleSnoozeOwners.insert(Self.overtimeOwner) }
         let plannedAt = now()
 
         return enqueue { [self] in
@@ -89,12 +92,13 @@ final class TimeclockReminderDelivery: ObservableObject {
             let delivered = await center.deliveredRequests()
             guard revision == expectedRevision else { return }
 
+            let desiredIDs = Set(plans.map(\.identifier))
             // Rebuild base schedules, but preserve still-applicable snoozes and their deadlines.
             let removedPending = pending.filter {
                 guard Self.isOwned($0) else { return false }
                 if Self.isSnooze($0) { return !isEligibleSnooze($0) }
                 if Self.owner($0) == Self.overtimeOwner { return !isEligible($0) }
-                if $0.identifier.contains("|") { return !isEligible($0) }
+                if $0.identifier.contains("|") { return !isEligible($0) || !desiredIDs.contains($0.identifier) }
                 return true
             }.map(\.identifier)
             center.removePending(removedPending)
@@ -103,7 +107,13 @@ final class TimeclockReminderDelivery: ObservableObject {
             }.map(\.identifier))
 
             lastError = nil
-            if plans.isEmpty { status = "No automatic reminders currently apply."; return }
+            lastReconciledAt = now()
+            if plans.isEmpty {
+                nextReminderAt = pending.filter { !removedPending.contains($0.identifier) && Self.isOwned($0) }
+                    .compactMap { Self.nextDate($0.trigger) }.min()
+                status = "No automatic reminders currently apply."
+                return
+            }
             guard await isAuthorized(), revision == expectedRevision else { return }
             let snoozedOwners = Set(pending.filter { Self.isSnooze($0) && isEligibleSnooze($0) }.compactMap(Self.owner))
             for plan in plans {
@@ -112,6 +122,10 @@ final class TimeclockReminderDelivery: ObservableObject {
                 if (plan.delaySeconds != nil || plan.fireDate != nil) && snoozedOwners.contains(plan.ownerIdentifier ?? plan.identifier) { continue }
                 let request = TimeclockReminderScheduler.request(for: plan, plannedAt: plannedAt, now: now())
                 if let existing = pending.first(where: { $0.identifier == request.identifier }),
+                   existing.content.title == request.content.title,
+                   existing.content.categoryIdentifier == request.content.categoryIdentifier,
+                   existing.content.interruptionLevel == request.content.interruptionLevel,
+                   existing.content.userInfo["soundSeconds"] as? Int == request.content.userInfo["soundSeconds"] as? Int,
                    existing.content.body == request.content.body,
                    existing.content.userInfo[TimeclockReminderScheduler.reminderSoundUserInfoKey] as? String == request.content.userInfo[TimeclockReminderScheduler.reminderSoundUserInfoKey] as? String,
                    let oldTrigger = existing.trigger as? UNCalendarNotificationTrigger,
@@ -125,6 +139,8 @@ final class TimeclockReminderDelivery: ObservableObject {
             guard revision == expectedRevision else { return }
             let scheduled = await center.pendingRequests().filter { Self.isOwned($0) }
             guard revision == expectedRevision else { return }
+            nextReminderAt = scheduled.compactMap { Self.nextDate($0.trigger) }.min()
+            lastReconciledAt = now()
             status = "\(scheduled.count) reminders queued with macOS. Focus and notification settings control presentation."
         }
     }
@@ -146,8 +162,9 @@ final class TimeclockReminderDelivery: ObservableObject {
             content.categoryIdentifier = request.content.categoryIdentifier
             content.userInfo[Self.ownerKey] = owner
             content.sound = request.content.sound
+            content.interruptionLevel = request.content.interruptionLevel
             if let sound = TimeclockReminderScheduler.reminderSound(from: request.content) {
-                TimeclockReminderScheduler.apply(sound, to: content)
+                TimeclockReminderScheduler.apply(sound, to: content, seconds: request.content.userInfo["soundSeconds"] as? Int ?? 10)
             }
 
             let identifier = Self.snoozePrefix + owner
@@ -164,9 +181,11 @@ final class TimeclockReminderDelivery: ObservableObject {
     }
 
     @discardableResult
-    func send(_ request: UNNotificationRequest) -> Task<Void, Never> {
+    func send(_ request: UNNotificationRequest, completion: @escaping (Bool) -> Void = { _ in }) -> Task<Void, Never> {
         let expectedRevision = revision
         return enqueue { [self] in
+            var queued = false
+            defer { completion(queued) }
             let owner = Self.owner(request)
             guard owner == nil || (revision == expectedRevision && isEligible(request)) else { return }
             guard await isAuthorized() else {
@@ -175,10 +194,11 @@ final class TimeclockReminderDelivery: ObservableObject {
             }
             if owner != nil {
                 guard revision == expectedRevision else { return }
-                await add(request, expectedRevision: expectedRevision)
+                queued = await add(request, expectedRevision: expectedRevision)
             } else {
                 do {
                     try await center.add(request)
+                    queued = true
                     lastError = nil
                     if Self.isTestOwner(request.identifier) {
                         testStatus = "Test queued for 5 seconds from now. Listen for the sound; switch apps to test background delivery."
@@ -199,6 +219,12 @@ final class TimeclockReminderDelivery: ObservableObject {
         if Self.isTestOwner(request.identifier) {
             testStatus = "Test reached macOS; banner and sound requested. Confirm that you heard it; delivery alone cannot verify your speakers."
         }
+    }
+
+    private static func nextDate(_ trigger: UNNotificationTrigger?) -> Date? {
+        if let calendar = trigger as? UNCalendarNotificationTrigger { return calendar.nextTriggerDate() }
+        if let interval = trigger as? UNTimeIntervalNotificationTrigger { return interval.nextTriggerDate() }
+        return nil
     }
 
     private func enqueue(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {

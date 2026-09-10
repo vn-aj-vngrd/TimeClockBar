@@ -4,6 +4,8 @@ Scope corrected on 2026-09-05: **Today · Time Clock · Report**. The earlier na
 
 ## Current work
 
+Reliability implementation — 2026-09-10: [status, performance, recovery, and notification plan](reliability-2026-09-10.md). Implemented locally with passing fixture regressions and an extraction benchmark. See the latest validation record below; native visual and physical notification gates remain pending. Earlier checked items describe the previous release.
+
 - [x] Remove the native report editor, draft/AI/export/archive implementation from the app; leave previously saved local data untouched.
 - [x] Replace the page menu with three visible tabs; preserve website shortcuts and add Cmd-0 for Today.
 - [x] Add dashboard routing for day off, working, break return, and report-before-clock-out.
@@ -15,6 +17,8 @@ Scope corrected on 2026-09-05: **Today · Time Clock · Report**. The earlier na
 - [x] Publish the internal version, install locally, and open Today with normal website access.
 
 ## Verification record
+
+2026-09-10 planning increment: inspected current observation/recovery and reminder code, existing tests, installed bundle version metadata (1.2.1), a current 29-second sound asset, and Apple documentation. Added the proposed reliability plan without changing application behavior. No build or XCTest run for this documentation-only increment; no real notification or website action performed. Running-process inspection was unavailable, so the running binary and reported incident are unverified.
 
 The prior reminder slice passed 81 tests. The broader experimental implementation reached 98 tests before scope was corrected; removed draft/AI tests are not evidence for the simplified product. Final counts and release evidence are recorded below after verification.
 
@@ -76,3 +80,46 @@ Release verification:
 - [Published v1.2.1](https://github.com/vn-aj-vngrd/TimeClockBar/releases/tag/v1.2.1). Uploaded archive SHA-256 matches the local artifact: `df7f9a6dde1b56aaa9ad305d3ab206a5f3add9efd3d1fee2d5f6aaab20954755`.
 - Installed and signature-verified `~/Applications/Time Clock Bar.app`; its executable matches the packaged Release build. Native inspection confirms normal Today, Time Clock, and Report navigation with no DEV/Preview label. No website controls were operated.
 - Moved four app bundles to Trash: previous installed v1.2.0, repository Debug, temporary XCTest host, and duplicate Release build. Only the installed v1.2.1 app remains in the inspected app/build locations. Settings, sessions, and local data were preserved; the current release zip is retained.
+
+### Reliability implementation — 2026-09-10
+
+- [x] Reproduce incidental-login, unrelated-resume, and history-timer classification failures against the original detector; fix with scoped visible-control extraction.
+- [x] Add debounced page-control observation, ten-second fallback reads, single-flight tokens, timeout invalidation, and capped navigation/content-process recovery.
+- [x] Keep last-known attendance separate from unavailable state; estimate display seconds without resetting minute-only timers or advancing observation freshness.
+- [x] Isolate menu-bar ticks from popover publication and bound active-session activity while allowing normal Mac sleep.
+- [x] Refresh hidden Time Clock pages by safe GET, preserving edited/focused input and leaving Report untouched.
+- [x] Reproduce/fix obsolete dated-stage retention and delayed-authorization catch-up scheduling. A dated catch-up now remains schedulable if authorization outlasts its original fire time.
+- [x] Acknowledge successful queue additions before consuming the hours-target budget; retry failures, preserve snooze sounds, and prioritize an overdue break over simultaneous clock-out.
+- [x] Add ten-second sound assets, optional twenty-second overdue variants, actual queue timing in Settings, and checkpoint silence/resume controls.
+- [x] Pass 114 tests, zero failures, in `/tmp/TimeClockBarReliability/Logs/Test/Test-TimeClockBar-2026.09.10_23-20-53-+0800.xcresult`.
+- [x] Pass version-script and whitespace checks. Version-script fixtures ran with commit/tag signing disabled only in that command's environment because global GPG signing was unavailable in the sandbox; repository signing preferences were unchanged.
+
+Performance evidence: the same 2,000-row WKWebView fixture averaged **7.30 ms before / 1.25 ms after**, twenty detector evaluations each. The retained benchmark attachment is `/tmp/timeclock-benchmark-attachments/AA3FB2BB-0467-427F-9200-FF7FD452CCDB.txt`; the temporary comparison test was removed. This is a detector benchmark, not a full-app latency or energy claim.
+
+Remaining gates:
+
+- [ ] Native visual/interaction inspection, blocked because Computer Use access to Time Clock Bar was not approved.
+- [ ] Real notification receipt/audio, foreground/background and Focus combinations, sleep/wake and quit/relaunch presentation.
+- [ ] Authenticated live-page classification, cross-browser detection latency, warm popover timing, and a representative shift's memory/energy use.
+- [ ] Optional Time Sensitive capability: Xcode requires a development signing certificate absent from the current local signing configuration. Standard local notifications remain available; no unsupported setting is exposed.
+
+No production attendance/report controls were operated, no real notification test was sent, and the installed application was not replaced or published. Source changes remain local and uncommitted.
+
+Final local build verification:
+
+- [x] Release build completed successfully with the repository-computed version **1.2.1, build 30** (a local modified build, not a new published release).
+- [x] `codesign --verify --deep --strict` passed; all ten bundled WAV assets were verified at their expected ten/twenty-second durations.
+- Built app: `build/TimeClockBarReliability/Build/Products/Release/Time Clock Bar.app`.
+- Final build log: `/tmp/timeclock-reliability-release.log`; final tests: `/tmp/timeclock-reliability-final-tests.log`.
+
+### Attendance-state reminder follow-up — 2026-09-10
+
+- [x] Reproduce early clock-in failure with a 12:00 observation before a 14:50 shift: pending alerts, snooze, delivered notice, and relaunch completion assertions failed before the fix.
+- [x] Associate early attendance with the selected work date, preserving the pre-midnight window and the next shift's reminders.
+- [x] Reproduce unreadable on-break timer failure: break-start reminders and snooze remained eligible. Persist break-start confirmation separately from its timer; retain known deadlines and give later breaks their own session identity.
+- [x] Verify already clocked-out and returned-from-break cancellation through the runtime planner and fake notification center, including obsolete banner snooze actions and completion after restart.
+- [x] Add ten regression tests covering state eligibility, 14:50 timing, unreadable/second breaks, legacy history, stale observations, off days, and midnight boundaries.
+- [x] Full XCTest suite: **124 passed**, zero test failures. Result: `/tmp/TimeClockBarReliability/Logs/Test/Test-TimeClockBar-2026.09.10_23-33-49-+0800.xcresult`; log: `/tmp/timeclock-state-eligibility-full-tests.log`.
+- [x] Release rebuilt at the same local **1.2.1, build 30** path above; signature and whitespace checks passed. Build log: `/tmp/timeclock-state-eligibility-release.log`.
+
+The installed app remains unchanged. Completion-aware cancellation requires a fresh observation while the app runs; the existing physical notification/Focus/sleep-wake gates remain pending. No real notifications or production website actions were used by these tests.

@@ -116,6 +116,27 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         let result = try await webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript)
         return try XCTUnwrap(TimeclockDOMDetection(result as? [String: Any]))
     }
+
+    func testIncidentalLoginTextDoesNotOverrideActiveControls() async throws {
+        let value = try await detect(html: "<main><button>Clock Out</button><p>Current 01:02</p><footer>Last login yesterday</footer></main>")
+        XCTAssertEqual(value.state, "active")
+    }
+
+    func testHiddenLoginFormDoesNotOverrideAttendance() async throws {
+        let value = try await detect(html: "<form hidden><input type='password'><button>Sign in</button></form><main><button>Clock Out</button></main>")
+        XCTAssertEqual(value.state, "active")
+    }
+
+    func testResumeInUnrelatedTextIsNotABreak() async throws {
+        let value = try await detect(html: "<main><button>Clock Out</button><p>Update your resume</p></main>")
+        XCTAssertEqual(value.state, "active")
+    }
+
+    func testHistoryTimeIsNotAnAttendanceTimer() async throws {
+        let value = try await detect(html: "<main><h1>Time Clock</h1><p>Meeting at 09:30</p></main>")
+        XCTAssertEqual(value.state, "unknown")
+        XCTAssertEqual(value.timer, "")
+    }
 }
 
 @MainActor

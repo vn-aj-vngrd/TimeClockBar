@@ -62,9 +62,12 @@ struct TodayView: View {
                     Divider()
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: controller.isPreview ? "eye" : "info.circle")
-                        Text(controller.isPreview ? "Local preview · website access paused" : statusCaption)
+                        Text(controller.isPreview ? "Local preview · website access paused" : controller.connectionStatus)
                             .fixedSize(horizontal: false, vertical: true)
                     }.font(.caption).foregroundStyle(.secondary)
+                    if let observed = controller.lastRefreshedAt {
+                        Text("Last observed \(observed, style: .relative) ago").font(.caption).foregroundStyle(.secondary)
+                    }
                     if let error = workday.persistenceError { Text(error).font(.caption).foregroundStyle(.red) }
                 }.padding(22)
             }
@@ -81,19 +84,20 @@ struct TodayView: View {
                 .foregroundStyle(complete ? .green : .secondary).frame(width: 18)
                 .accessibilityLabel(complete ? "Observed complete" : "Scheduled")
             Text(title)
+            if let checkpoint = workday.checkpoints.first(where: { $0.kind == kind }), !checkpoint.isComplete {
+                if checkpoint.isSilenced {
+                    Button("Resume") { controller.resumeCheckpoint(checkpoint) }
+                        .buttonStyle(.borderless).font(.caption)
+                        .accessibilityLabel("Resume \(title) reminders")
+                } else {
+                    Button("Silence") { controller.silenceCheckpoint(checkpoint) }
+                        .buttonStyle(.borderless).font(.caption)
+                        .accessibilityLabel("Silence \(title) reminders")
+                }
+            }
             Spacer()
             Text(formatted(date, template: "Ejm"))
                 .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    private var statusCaption: String {
-        switch controller.state {
-        case .active, .onBreak, .clockedOut:
-            return "Clock status comes from Time Clock. File and review your report on the Report page."
-        case .loginRequired: return "Sign in on the Time Clock page to resume status updates."
-        case .loading: return "Checking Time Clock…"
-        case .stale, .unknown: return "Clock status is unavailable. Refresh it on the Time Clock page."
         }
     }
 

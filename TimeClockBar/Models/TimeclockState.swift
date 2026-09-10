@@ -101,6 +101,7 @@ enum TimeclockStatusIndicator: Equatable {
     case none
     case overtime
     case overBreak
+    case pastShiftEnd
 
     var title: String? {
         switch self {
@@ -110,6 +111,8 @@ enum TimeclockStatusIndicator: Equatable {
             return "Overtime"
         case .overBreak:
             return "Over break"
+        case .pastShiftEnd:
+            return "Past shift end"
         }
     }
 
@@ -121,15 +124,20 @@ enum TimeclockStatusIndicator: Equatable {
             return "Over today's target"
         case .overBreak:
             return "Break is over the configured duration"
+        case .pastShiftEnd:
+            return "Your scheduled shift has ended"
         }
     }
 
-    static func indicator(state: TimeclockState, breakDurationMinutes: Int, overtimeMinutes: Int) -> TimeclockStatusIndicator {
+    static func indicator(state: TimeclockState, breakDurationMinutes: Int, overtimeMinutes: Int, shiftEnded: Bool = false) -> TimeclockStatusIndicator {
         if case .onBreak(let time) = state,
+           breakDurationMinutes > 0,
            let breakMinutes = TimeclockTimeMath.timerMinutes(from: time),
            breakMinutes >= breakDurationMinutes {
             return .overBreak
         }
+
+        if case .active = state, shiftEnded { return .pastShiftEnd }
 
         if case .active = state, overtimeMinutes > 0 {
             return .overtime

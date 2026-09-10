@@ -1,6 +1,6 @@
 # Checkpoint reminders
 
-Status: proposed behavior, 2026-09-05. The user chose gentle warnings with limited escalation. This specification owns reminder timing, completion, and recovery semantics; [CONTEXT](../../CONTEXT.md) owns terminology.
+Status: policy specification, 2026-09-05. Local reliability implementation and remaining platform gates are recorded in [the 2026-09-10 checklist](../plans/workday-companion-progress.md). The user chose gentle warnings with limited escalation. This specification owns reminder timing, completion, and recovery semantics; [CONTEXT](../../CONTEXT.md) owns terminology.
 
 ## Inputs and authority
 
@@ -9,6 +9,8 @@ Resolve each shift into actual start/end dates in an explicit work timezone, key
 The first version supports one planned main break with a configurable duration. Additional observed breaks still have return deadlines; associating them with the planned main break must be explicit if ambiguous. Paid/unpaid break policy and work-hours targets are user configuration, not inferred employer rules. A zero-duration setting disables the planned break rather than immediately declaring every break overdue.
 
 Completion requires a fresh observation from Time Clock: active completes clock-in; an associated on-break transition completes the planned break-start checkpoint; leaving that break completes its return checkpoint; clocked-out completes clock-out. Schedule edits, notification clicks, and elapsed time do not confirm these actions. In version one, actions open the relevant website controls; the app does not silently clock the user in or out.
+
+Early attendance counts from the start of the scheduled work date in the work timezone, retaining the one-hour pre-start window for shifts just after midnight. Only the selected shift receives that observation; off-day activity cannot complete a later work date. Once working has been observed, this shift's clock-in reminders stay canceled through temporary unavailable states and relaunch. A confirmed on-break state completes break-start even without a readable timer; return reminders wait for a known session start. A later break gets a separate return deadline. Clocking out after an observed session cancels all remaining attendance prompts for that shift, including snoozes and obsolete delivered notices.
 
 ## Recommended timing defaults
 
@@ -71,6 +73,9 @@ Diagnostics show the next pending checkpoint, last reconciliation, permission st
 | Scenario | Required result |
 |---|---|
 | Clock in before the advance warning | Cancel this shift's clock-in prompts; retain the next shift's plan |
+| Clock in at 12:00 for a 14:50 shift | Complete today's clock-in even more than an hour early; no 14:50 alert after restart |
+| Already on break with an unreadable timer | Cancel start-break alerts immediately; wait for a valid timer before planning return |
+| Return from break before its deadline | Cancel break-return alerts and snoozes; retain clock-out reminders |
 | Snooze clock-out, then clock out | Pending snooze and due alerts disappear; no report submission is inferred |
 | Clocked out at preferred break time | No claim that a break must start; show the actual next actionable checkpoint |
 | Main break completed before its preferred time | The associated planned-break checkpoint stays complete after resume/restart |
@@ -86,3 +91,7 @@ Diagnostics show the next pending checkpoint, last reconciliation, permission st
 | App terminates; user clocks out elsewhere | Any remaining fallback asks to check the scheduled deadline; it does not assert current attendance |
 
 Implement these as deterministic planner/reconciler tests where possible. Verify banner actions, sound, foreground/background delivery, Focus, sleep/wake, and restart on a real Mac; planner tests cannot prove those services.
+
+## Local sound implementation — 2026-09-10
+
+Ordinary bundled clips now last ten seconds. Settings can opt into twenty-second variants for overdue break-return and clock-out stages; normal advance and due alerts remain ten seconds. Tone selections are preserved. Preview/test buttons for Over Break and Clock Out follow the longer-sound setting, and snoozes retain the selected duration. macOS controls actual playback length and presentation. Time Sensitive delivery remains deferred until developer signing and physical verification are available.

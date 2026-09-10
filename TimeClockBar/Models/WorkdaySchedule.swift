@@ -45,12 +45,10 @@ struct WorkdaySchedule {
     }
 
     static func dateString(_ date: Date, timeZone: TimeZone = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 
     private func time(_ minutes: Int, on day: Date) -> Date? {

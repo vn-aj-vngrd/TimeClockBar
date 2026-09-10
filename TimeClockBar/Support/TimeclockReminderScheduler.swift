@@ -55,6 +55,7 @@ struct TimeclockReminderPlan: Equatable {
     let sound: TimeclockReminderSound
     var fireDate: Date? = nil
     var ownerIdentifier: String? = nil
+    var soundSeconds = 10
 }
 
 enum TimeclockReminderScheduler {
@@ -108,10 +109,16 @@ enum TimeclockReminderScheduler {
             weekdays: workingWeekdays, startMinutes: workStartMinutes, endMinutes: workEndMinutes,
             breakMinutes: breakReminderMinutes, breakDuration: breakDurationMinutes
         )
-        let result = workday.plans(schedule: schedule, state: state, enabled: enabledKinds,
+        var result = workday.plans(schedule: schedule, state: state, enabled: enabledKinds,
             sounds: [.workStart: workReminderSound, .breakStart: breakReminderSound,
                      .breakOver: breakOverReminderSound, .clockOut: clockOutReminderSound],
             workLead: workReminderLeadMinutes, endLead: clockOutReminderLeadMinutes)
+        for index in result.plans.indices {
+            let id = result.plans[index].identifier
+            let overdue = id.hasSuffix("|due-2") || id.hasSuffix("|due-5") || id.hasSuffix("|due-15")
+            let urgentKind = id.contains("|breakOver-") || id.contains("|clockOut|")
+            result.plans[index].soundSeconds = overdue && urgentKind && UserDefaults.standard.bool(forKey: "longOverdueSounds") ? 20 : 10
+        }
         delivery.reconcile(plans: result.plans, allowsOvertime: allowsOvertime,
                            unverifiedSnoozeOwners: result.owners, activeOwners: result.owners,
                            onScheduled: { workday.markScheduled($0) })
@@ -327,13 +334,15 @@ enum TimeclockReminderScheduler {
         body: String,
         categoryIdentifier: String,
         delaySeconds: TimeInterval? = nil,
-        reminderSound: TimeclockReminderSound? = nil
+        reminderSound: TimeclockReminderSound? = nil,
+        soundSeconds: Int = 10,
+        completion: @escaping (Bool) -> Void = { _ in }
     ) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         if let reminderSound {
-            apply(reminderSound, to: content)
+            apply(reminderSound, to: content, seconds: soundSeconds)
         } else {
             content.sound = .default
         }
@@ -342,7 +351,7 @@ enum TimeclockReminderScheduler {
             content.userInfo[TimeclockReminderDelivery.ownerKey] = identifier
         }
         let trigger = delaySeconds.map { UNTimeIntervalNotificationTrigger(timeInterval: max(1, $0), repeats: false) }
-        delivery.send(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger))
+        delivery.send(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger), completion: completion)
     }
 
     static func request(for plan: TimeclockReminderPlan, plannedAt: Date, now: Date) -> UNNotificationRequest {
@@ -351,13 +360,15 @@ enum TimeclockReminderScheduler {
         content.body = plan.body
         content.categoryIdentifier = plan.categoryIdentifier
         content.userInfo[TimeclockReminderDelivery.ownerKey] = plan.ownerIdentifier ?? plan.identifier
-        apply(plan.sound, to: content)
+        apply(plan.sound, to: content, seconds: plan.soundSeconds)
 
         let trigger: UNNotificationTrigger
         if let date = plan.fireDate {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-            var components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+            // Authorization and queue work may outlive a one-second catch-up deadline.
+            let deliverAt = max(date, now.addingTimeInterval(1))
+            var components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: deliverAt)
             components.timeZone = calendar.timeZone
             trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         } else if let delay = plan.delaySeconds {
@@ -373,9 +384,12 @@ enum TimeclockReminderScheduler {
         return UNNotificationRequest(identifier: plan.identifier, content: content, trigger: trigger)
     }
 
-    static func apply(_ sound: TimeclockReminderSound, to content: UNMutableNotificationContent) {
-        content.sound = sound.notificationSound
+    static func apply(_ sound: TimeclockReminderSound, to content: UNMutableNotificationContent, seconds: Int = 10) {
+        let duration = seconds == 20 ? 20 : 10
+        let name = duration == 20 ? "\(sound.rawValue)-20.wav" : sound.fileName
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(name))
         content.userInfo[reminderSoundUserInfoKey] = sound.rawValue
+        content.userInfo["soundSeconds"] = duration
     }
 
     static func reminderSound(from content: UNNotificationContent) -> TimeclockReminderSound? {

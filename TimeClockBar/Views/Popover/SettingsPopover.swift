@@ -135,7 +135,11 @@ struct SettingsPopover: View {
             reminderSoundRow("Break", kind: .breakStart)
             reminderSoundRow("Over break", kind: .breakOver)
             reminderSoundRow("Clock out", kind: .clockOut)
-            reminderSoundRow("Overtime", kind: .overtime)
+            reminderSoundRow("Hours target", kind: .overtime)
+            PreferenceToggleRow("20-second overdue sounds", isOn: Binding(
+                get: { controller.longOverdueSounds }, set: controller.setLongOverdueSounds))
+            Text("Sounds last up to 10 seconds. Longer sounds apply only to overdue break and clock-out alerts.")
+                .font(.caption).foregroundStyle(.secondary).padding(.vertical, 6)
                 .lastPreferenceRow()
         }
     }
@@ -163,7 +167,7 @@ struct SettingsPopover: View {
                 }
             }
 
-            PreferenceToggleRow("Overtime reminder", isOn: overtimeReminderEnabledBinding)
+            PreferenceToggleRow("Hours-target reminder", isOn: overtimeReminderEnabledBinding)
                 .lastPreferenceRow()
         }
     }
@@ -172,6 +176,16 @@ struct SettingsPopover: View {
             PreferenceSection("Notification Tests") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(controller.isPreview ? "Automatic reminders are paused in preview." : delivery.status).font(.caption).foregroundStyle(.secondary)
+                    if let date = delivery.nextReminderAt {
+                        Text("Next queued reminder: \(date, format: .dateTime.weekday().hour().minute())")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let date = delivery.lastReconciledAt {
+                        Text("Last checked: \(date, format: .dateTime.hour().minute().second())")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("Scheduled coverage: the next two shifts. Keep launch at login enabled to renew it.")
+                        .font(.caption).foregroundStyle(.secondary)
                     if let testStatus = delivery.testStatus {
                         Text(testStatus).font(.caption).foregroundStyle(.secondary)
                     }

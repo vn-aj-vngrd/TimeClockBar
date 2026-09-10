@@ -22,7 +22,15 @@ Time Clock Bar is a single-target macOS SwiftUI app with AppKit integration for 
 
 Runtime state is exposed from `TimeclockController` with `@Published` properties. User preferences are stored in `UserDefaults` with static key constants in the controller.
 
-Snoozes carry a stable source identifier in OS notification metadata. Reconciliation cancels state-ineligible requests and preserves applicable neutral snoozes while clock state is unverified. Base schedules still use weekly triggers; the dated checkpoint model and persisted completion/escalation budgets are upcoming work in the [implementation checklist](../plans/workday-companion-progress.md).
+Snoozes carry a stable source identifier in OS notification metadata. Runtime schedules use dated checkpoints over the next two shifts, with persisted completion, silence, and queue reservations. Reconciliation removes obsolete dated stages and preserves eligible snoozes. The weekly planner is retained only for existing policy regressions. Queue success is not delivery or attendance completion.
+
+`TimeclockObservation` bounds page reads to one in flight, rejects results invalidated by navigation/recovery, and retains the last valid attendance observation separately from unavailable/login state. `TimeclockController` performs fallback extraction every ten seconds and receives debounced visible-control changes through a weak WebKit message handler. Native one-second display estimates use timestamped observations and never refresh source timestamps. Menu-bar titles use a dedicated Combine subject so their ticks do not publish changes to the whole popover.
+
+While a fresh work session is observed, a scoped `ProcessInfo` activity prevents App Nap while allowing idle system sleep. It ends on unavailable status, logout, clock-out, or polling stop. The native watchdog handles ten-second read timeouts, thirty-second navigation timeouts, and content-process termination with capped retries. Hidden Time Clock pages get a safe overview GET approximately every sixty seconds, unless input has been edited or a field is focused. Report is never part of this refresh path. Visible pages continue observation without disruptive periodic reloads; changes from another browser are not guaranteed current until remote refresh.
+
+Reminder queue acknowledgements reach the caller only after successful notification-center addition. The hours-target budget uses `overtimeQueued.v2.<work-date>` instead of the old flag written before scheduling. Failed attempts retry at most once a minute while eligible. Existing explicit hours-target preferences remain; new installs default to a quiet target indicator. Past scheduled shift end is a separate status indicator.
+
+All ordinary sounds are ten seconds; `longOverdueSounds` selects twenty-second assets only for overdue break-return and clock-out stages. Snoozes retain sound duration and ownership. Settings shows actual queued timing and reconciliation status. Time Sensitive capability remains deferred because the current local signing configuration lacks a development certificate.
 
 ## External Integrations
 

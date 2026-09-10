@@ -185,6 +185,21 @@ final class TimeclockReminderDeliveryTests: XCTestCase {
         XCTAssertEqual(trigger.timeInterval, 3)
     }
 
+    func testDatedCatchUpSurvivesAuthorizationDelay() async throws {
+        let center = MemoryNotificationCenter()
+        var currentTime = start
+        let delivery = TimeclockReminderDelivery(center: center, now: { currentTime })
+        center.beforeAuthorization = { currentTime = currentTime.addingTimeInterval(7) }
+        var plan = makePlan("Asia/Manila|2026-09-10|breakOver-0|due-5")
+        plan.fireDate = start.addingTimeInterval(1)
+        await delivery.reconcile(plans: [plan]).value
+        let trigger = try XCTUnwrap(center.pending[plan.identifier]?.trigger as? UNCalendarNotificationTrigger)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let actual = try XCTUnwrap(calendar.date(from: trigger.dateComponents))
+        XCTAssertGreaterThan(actual, currentTime, "An authorization delay must not leave the request in the past.")
+    }
+
     func testDeniedAuthorizationStillCancelsObsoleteRequests() async {
         let center = MemoryNotificationCenter()
         center.authorized = false
@@ -271,6 +286,67 @@ final class TimeclockReminderDeliveryTests: XCTestCase {
         )
     }
 
+    func testScheduleEditRemovesObsoleteStagesOfEligibleOwner() async throws {
+        let center = MemoryNotificationCenter()
+        let delivery = TimeclockReminderDelivery(center: center)
+        let owner = "Asia/Manila|2026-09-10|clockOut"
+        var advance = makePlan(owner + "|advance")
+        advance.ownerIdentifier = owner
+        advance.fireDate = start.addingTimeInterval(600)
+        var due = makePlan(owner + "|due-0")
+        due.ownerIdentifier = owner
+        due.fireDate = start.addingTimeInterval(1200)
+        await delivery.reconcile(plans: [advance, due], activeOwners: [owner]).value
+        await delivery.reconcile(plans: [due], activeOwners: [owner]).value
+        XCTAssertNil(center.pending[advance.identifier])
+        XCTAssertNotNil(center.pending[due.identifier])
+    }
+
+    func testImmediateFailureAcknowledgesFailureAndAllowsRetry() async {
+        let center = MemoryNotificationCenter()
+        let delivery = TimeclockReminderDelivery(center: center)
+        await delivery.reconcile(plans: [], allowsOvertime: true).value
+        center.shouldFailAdd = true
+        var successfulReservations = 0
+        var outcomes: [Bool] = []
+        let record: (Bool) -> Void = { queued in
+            outcomes.append(queued)
+            if queued { successfulReservations += 1 }
+        }
+        await delivery.send(makeRequest(TimeclockReminderDelivery.overtimeOwner), completion: record).value
+        XCTAssertEqual(successfulReservations, 0)
+        center.shouldFailAdd = false
+        await delivery.send(makeRequest(TimeclockReminderDelivery.overtimeOwner), completion: record).value
+        XCTAssertEqual(successfulReservations, 1)
+        XCTAssertEqual(outcomes, [false, true])
+    }
+
+    func testLostFutureRequestIsRestoredWithoutDuplicatingExistingRequest() async {
+        let center = MemoryNotificationCenter()
+        let delivery = TimeclockReminderDelivery(center: center)
+        var plan = makePlan("Asia/Manila|2026-09-10|clockOut|due-0")
+        plan.ownerIdentifier = "Asia/Manila|2026-09-10|clockOut"
+        plan.fireDate = Date().addingTimeInterval(600)
+        await delivery.reconcile(plans: [plan]).value
+        await delivery.reconcile(plans: [plan]).value
+        XCTAssertEqual(center.addCount, 1)
+        center.pending.removeAll()
+        await delivery.reconcile(plans: [plan]).value
+        XCTAssertEqual(center.addCount, 2)
+        XCTAssertNotNil(center.pending[plan.identifier])
+    }
+
+    func testSnoozePreservesLongSound() async throws {
+        let center = MemoryNotificationCenter()
+        let delivery = TimeclockReminderDelivery(center: center)
+        var plan = makePlan("break-over-reminder", delay: 60)
+        plan.soundSeconds = 20
+        await delivery.reconcile(plans: [plan]).value
+        await delivery.snooze(try XCTUnwrap(center.pending[plan.identifier]), minutes: 5).value
+        let content = try XCTUnwrap(center.pending[TimeclockReminderDelivery.snoozePrefix + plan.identifier]?.content)
+        XCTAssertEqual(content.userInfo["soundSeconds"] as? Int, 20)
+    }
+
     private func makeRequest(_ identifier: String) -> UNNotificationRequest {
         UNNotificationRequest(identifier: identifier, content: UNMutableNotificationContent(), trigger: nil)
     }
@@ -287,7 +363,7 @@ final class TimeclockReminderDeliveryTests: XCTestCase {
 }
 
 @MainActor
-private final class MemoryNotificationCenter: TimeclockNotificationCenter {
+final class MemoryNotificationCenter: TimeclockNotificationCenter {
     var pending: [String: UNNotificationRequest] = [:]
     var delivered: [String: UNNotificationRequest] = [:]
     var authorized = true

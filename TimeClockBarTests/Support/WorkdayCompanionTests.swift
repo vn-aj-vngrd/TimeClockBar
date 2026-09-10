@@ -120,6 +120,21 @@ final class WorkdayCompanionTests: XCTestCase {
         XCTAssertEqual(second.due, now.addingTimeInterval(7200 - 150 + 3600))
     }
 
+    func testWakeWaitsForFreshObservationBeforeCatchUp() {
+        let engine = WorkdayReminderController(defaults: defaults())
+        let now = date("2026-09-04T14:20:00Z")
+        XCTAssertFalse(plans(engine, .stale, now).contains { $0.fireDate == now.addingTimeInterval(1) })
+        XCTAssertEqual(plans(engine, .clockedOut, now).filter { $0.fireDate == now.addingTimeInterval(1) }.count, 1)
+    }
+
+    func testOverdueBreakTakesPriorityOverSimultaneousClockOut() {
+        let engine = WorkdayReminderController(defaults: defaults())
+        let now = date("2026-09-04T23:20:00Z")
+        let result = plans(engine, .onBreak("01:20:00"), now).filter { $0.fireDate == now.addingTimeInterval(1) }
+        XCTAssertEqual(result.count, 1)
+        XCTAssertTrue(result.first?.ownerIdentifier?.contains("|breakOver-") == true)
+    }
+
     func testSaturdayDashboardHasNoClockInPrompt() {
         let value = TodayDashboard.resolve(state: .clockedOut, schedule: schedule, checkpoints: [], now: date("2026-09-05T06:00:00Z"))
         XCTAssertEqual(value.phase, .offDay)

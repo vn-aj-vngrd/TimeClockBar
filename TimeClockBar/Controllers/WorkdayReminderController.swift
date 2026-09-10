@@ -6,6 +6,7 @@ final class WorkdayReminderController: ObservableObject {
     struct Record: Codable, Equatable {
         var seenWorking = false
         var clockedOut = false
+        var hasStartedBreak: Bool?
         var breakStartedAt: Date?
         var breakReturned = false
         var breakSessionNumber: Int?
@@ -28,23 +29,28 @@ final class WorkdayReminderController: ObservableObject {
     }
 
     func observe(state: TimeclockState, schedule: WorkdaySchedule, now: Date = Date()) {
-        shift = schedule.currentShift(at: now)
+        let nextShift = schedule.currentShift(at: now)
+        if shift != nextShift { shift = nextShift }
         guard let shift else { checkpoints = []; return }
         var record = records[shift.id] ?? Record()
-        // Only associate observations with the actual shift window; future shifts remain untouched.
-        if now >= shift.start.addingTimeInterval(-3600), now < shift.end.addingTimeInterval(4 * 3600) {
+        // Count early attendance on this work date without completing a later work date.
+        if canObserve(shift, schedule: schedule, now: now) {
             switch state {
             case .active:
                 record.seenWorking = true
                 record.clockedOut = false
-                if record.breakStartedAt != nil { record.breakReturned = true }
+                if record.hasStartedBreak == true || record.breakStartedAt != nil { record.breakReturned = true }
             case .onBreak(let timer):
                 record.seenWorking = true
                 record.clockedOut = false
-                if (record.breakReturned || record.breakStartedAt == nil),
+                record.hasStartedBreak = true
+                if record.breakReturned {
+                    record.breakSessionNumber = (record.breakSessionNumber ?? 0) + 1
+                    record.breakStartedAt = nil
+                }
+                record.breakReturned = false
+                if record.breakStartedAt == nil,
                    let elapsed = TimeclockTimeMath.timerSeconds(from: timer), elapsed <= 24 * 3600 {
-                    if record.breakReturned { record.breakSessionNumber = (record.breakSessionNumber ?? 0) + 1 }
-                    record.breakReturned = false
                     record.breakStartedAt = now.addingTimeInterval(-Double(elapsed))
                 }
             case .clockedOut:
@@ -56,7 +62,8 @@ final class WorkdayReminderController: ObservableObject {
             records[shift.id] = record
             persist()
         }
-        checkpoints = makeCheckpoints(shift: shift, record: record, schedule: schedule, workLead: 15, endLead: 15)
+        let next = makeCheckpoints(shift: shift, record: record, schedule: schedule, workLead: 15, endLead: 15)
+        if checkpoints != next { checkpoints = next }
     }
 
     func plans(schedule: WorkdaySchedule, state: TimeclockState, enabled: Set<TimeclockReminderKind>,
@@ -67,6 +74,8 @@ final class WorkdayReminderController: ObservableObject {
             checkpoints = makeCheckpoints(shift: shift, record: records[shift.id] ?? Record(), schedule: schedule, workLead: workLead, endLead: endLead)
         }
         guard persistenceError == nil else { return ([], []) }
+        let verified: Bool
+        switch state { case .active, .onBreak, .clockedOut: verified = true; default: verified = false }
         var plans: [TimeclockReminderPlan] = []
         var owners: Set<String> = []
         // Two shifts stay below the platform's finite pending-request budget.
@@ -75,7 +84,7 @@ final class WorkdayReminderController: ObservableObject {
             let record = records[shift.id] ?? Record()
             for checkpoint in makeCheckpoints(shift: shift, record: record, schedule: schedule, workLead: workLead, endLead: endLead) {
                 guard enabled.contains(checkpoint.kind), !checkpoint.isComplete, !checkpoint.isSilenced else { continue }
-                let isCurrent = now >= shift.start.addingTimeInterval(-3600)
+                let isCurrent = shift.id == self.shift?.id && canObserve(shift, schedule: schedule, now: now)
                 let knownOut = state == .clockedOut && isCurrent
                 if knownOut && checkpoint.kind != .workStart { continue }
                 // Break and clock-out prompts require an observed work session.
@@ -87,6 +96,7 @@ final class WorkdayReminderController: ObservableObject {
                     let date = checkpoint.due.addingTimeInterval(Double(offset * 60))
                     let id = "\(checkpoint.id)|\(stage)"
                     if date <= now {
+                        guard verified else { continue }
                         // On wake, emit only the latest missed stage. Never replay a delivered/queued stage.
                         guard !caughtUp else { continue }
                         caughtUp = true
@@ -97,8 +107,8 @@ final class WorkdayReminderController: ObservableObject {
                         title: checkpoint.kind == .clockOut && offset < 0 ? "File your report before clock-out"
                             : date > now && offset < 0 ? "\(checkpoint.title) soon" : "Check: \(checkpoint.title.lowercased())",
                         body: checkpoint.kind == .clockOut
-                            ? "File your daily report on Full Scale, then open Time Clock to clock out."
-                            : "Open Time Clock to check your \(checkpoint.title.lowercased()).",
+                            ? "File your daily report on Full Scale, then open Time Clock to clock out. Scheduled end \(deadlineText(checkpoint.due, schedule: schedule))."
+                            : "Open Time Clock to check your \(checkpoint.title.lowercased()). Due \(deadlineText(checkpoint.due, schedule: schedule)).",
                         minutes: 0, weekday: 0,
                         categoryIdentifier: checkpoint.kind == .clockOut && offset < 0
                             ? TimeclockReminderScheduler.reportReminderCategoryIdentifier : TimeclockReminderScheduler.reminderCategoryIdentifier,
@@ -112,14 +122,27 @@ final class WorkdayReminderController: ObservableObject {
         let caughtUp = plans.filter { $0.fireDate == catchUpTime }
         if caughtUp.count > 1 {
             func priority(_ plan: TimeclockReminderPlan) -> Int {
-                if plan.ownerIdentifier?.hasSuffix("|clockOut") == true { return 0 }
-                if plan.ownerIdentifier?.contains("|breakOver-") == true { return 1 }
+                if plan.ownerIdentifier?.contains("|breakOver-") == true { return 0 }
+                if plan.ownerIdentifier?.hasSuffix("|clockOut") == true { return 1 }
                 return 2
             }
             let primary = caughtUp.sorted { priority($0) < priority($1) }.first!.identifier
             let skipped = Set(caughtUp.filter { $0.identifier != primary }.map(\.identifier))
             skipped.forEach(markScheduled)
             plans.removeAll { skipped.contains($0.identifier) }
+        }
+        // One sound per instant. Break return takes priority; other checkpoints stay visible.
+        let groups = Dictionary(grouping: plans) { Int(($0.fireDate ?? now).timeIntervalSince1970) }
+        plans = groups.values.compactMap { group in
+            group.sorted {
+                func priority(_ plan: TimeclockReminderPlan) -> Int {
+                    if plan.ownerIdentifier?.contains("|breakOver-") == true { return 0 }
+                    if plan.ownerIdentifier?.hasSuffix("|clockOut") == true { return 1 }
+                    return 2
+                }
+                let left = priority($0), right = priority($1)
+                return left == right ? $0.identifier < $1.identifier : left < right
+            }.first
         }
         return (plans.sorted { ($0.fireDate ?? now) < ($1.fireDate ?? now) }, owners)
     }
@@ -136,12 +159,24 @@ final class WorkdayReminderController: ObservableObject {
 
     func silence(_ checkpoint: WorkdayCheckpoint) { silence(owner: checkpoint.id) }
 
+    func resume(_ checkpoint: WorkdayCheckpoint) {
+        guard let shift, var record = records[shift.id], checkpoint.isSilenced else { return }
+        record.silenced.remove(checkpoint.id)
+        records[shift.id] = record
+        persist()
+    }
+
     func silence(owner: String) {
         guard let shift, checkpoints.contains(where: { $0.id == owner && !$0.isComplete }) else { return }
         var record = records[shift.id] ?? Record()
         record.silenced.insert(owner)
         records[shift.id] = record
         persist()
+    }
+
+    private func canObserve(_ shift: WorkdaySchedule.Shift, schedule: WorkdaySchedule, now: Date) -> Bool {
+        let earliest = min(schedule.calendar.startOfDay(for: shift.start), shift.start.addingTimeInterval(-3600))
+        return now >= earliest && now < shift.end.addingTimeInterval(4 * 3600)
     }
 
     private func makeCheckpoints(shift: WorkdaySchedule.Shift, record: Record, schedule: WorkdaySchedule,
@@ -154,7 +189,8 @@ final class WorkdayReminderController: ObservableObject {
         }
         var result = [checkpoint(.workStart, "Clock in", shift.start, workLead, record.seenWorking)]
         if let date = shift.preferredBreak {
-            result.append(checkpoint(.breakStart, "Start break", date, 5, record.breakStartedAt != nil || record.clockedOut))
+            result.append(checkpoint(.breakStart, "Start break", date, 5,
+                                     record.hasStartedBreak == true || record.breakStartedAt != nil || record.clockedOut))
         }
         if let start = record.breakStartedAt, schedule.breakDuration > 0 {
             result.append(checkpoint(.breakOver, "Return from break", start.addingTimeInterval(Double(schedule.breakDuration * 60)),
@@ -162,6 +198,13 @@ final class WorkdayReminderController: ObservableObject {
         }
         result.append(checkpoint(.clockOut, "Clock out", shift.end, endLead, record.clockedOut))
         return result
+    }
+
+    private func deadlineText(_ date: Date, schedule: WorkdaySchedule) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = schedule.timeZone
+        formatter.dateFormat = "EEE HH:mm:ss z"
+        return formatter.string(from: date)
     }
 
     private func persist() {

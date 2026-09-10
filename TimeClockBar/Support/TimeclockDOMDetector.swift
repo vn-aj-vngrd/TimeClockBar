@@ -30,139 +30,82 @@ enum TimeclockDOMDetector {
         )
     }
 
-    // DOM detection is intentionally text-based so selectors can be tuned after inspecting the live page.
-    static let detectionScript = """
+
+    // Observe controls and navigation; timer-only text mutations do not cross the bridge.
+    static let observationScript = #"""
     (() => {
-      const normalize = (value) =>
-        (value || "").replace(/\\s+/g, " ").trim();
-
-      const bodyText = normalize(document.body?.innerText || "");
-      const lower = bodyText.toLowerCase();
-
-      const timePattern = /\\b\\d{1,2}:\\d{2}(?:(?::|\\.)\\d{1,2})?\\b/;
-      const cleanTimer = (value) => {
-        const match = normalize(value).match(timePattern);
-        return match ? match[0] : "";
+      if (window.__timeclockObserver) return;
+      window.__timeclockObserver = true;
+      let pending;
+      const notify = () => {
+        clearTimeout(pending);
+        pending = setTimeout(() => window.webkit.messageHandlers.timeclockChanged.postMessage(null), 250);
       };
-      const metricTime = (label) => {
-        const match = bodyText.match(new RegExp("\\\\b" + label + "\\\\s+(\\\\d{1,2}:\\\\d{2}(?:(?::|\\\\.)\\\\d{1,2})?)", "i"));
-        return match ? match[1] : "";
-      };
-
-      const timerSelectors = [
-        '[data-testid="timer"]',
-        '[data-testid*="timer"]',
-        '[data-testid*="elapsed"]',
-        '[data-testid*="duration"]',
-        '[class*="timer"]',
-        '[class*="duration"]',
-        '[class*="elapsed"]',
-        '[id*="timer"]'
-      ];
-
-      const findSidebarTimer = () => {
-        const elements = Array.from(document.querySelectorAll("body *"));
-
-        for (const element of elements) {
-          const text = normalize(element.innerText || element.textContent || "");
-          const timer = cleanTimer(text);
-
-          if (!timer || text !== timer) {
-            continue;
-          }
-
-          let parent = element.parentElement;
-
-          for (let depth = 0; parent && depth < 5; depth += 1) {
-            const parentText = normalize(parent.innerText || parent.textContent || "").toLowerCase();
-
-            if (parentText.includes("time clock")) {
-              return timer;
-            }
-
-            parent = parent.parentElement;
-          }
-        }
-
-        return "";
-      };
-
-      const currentTimer = metricTime("Current");
-      const dayTimer = metricTime("Day");
-      const weekTimer = metricTime("Week");
-      let primaryTimer = "";
-
-      for (const selector of timerSelectors) {
-        if (primaryTimer) {
-          break;
-        }
-
-        const el = document.querySelector(selector);
-        const text = cleanTimer(el?.innerText || el?.textContent || "");
-        if (text) {
-          primaryTimer = text;
-          break;
-        }
-      }
-
-      if (!primaryTimer) {
-        primaryTimer = findSidebarTimer();
-      }
-
-      if (!primaryTimer) {
-        const match = bodyText.match(timePattern);
-        primaryTimer = match ? match[0] : "";
-      }
-
-      const hasLogin =
-        lower.includes("login") ||
-        lower.includes("log in") ||
-        lower.includes("sign in");
-
-      const hasClockIn = lower.includes("clock in");
-      const hasClockOut = lower.includes("clock out");
-
-      const hasStartBreak =
-        lower.includes("start break") ||
-        lower.includes("take break");
-
-      const hasEndBreak =
-        lower.includes("end break") ||
-        lower.includes("resume") ||
-        lower.includes("back from break");
-
-      const hasOnBreak =
-        lower.includes("on break") ||
-        lower.includes("currently on break");
-
-      const detectedTimer = primaryTimer || currentTimer || dayTimer || weekTimer;
-      const hasSidebarTimer =
-        Boolean(detectedTimer) &&
-        lower.includes("time clock") &&
-        !hasClockIn;
-
-      let state = "unknown";
-
-      if (hasLogin) {
-        state = "loginRequired";
-      } else if (hasEndBreak || hasOnBreak) {
-        state = "onBreak";
-      } else if (hasClockOut || hasStartBreak) {
-        state = "active";
-      } else if (hasSidebarTimer) {
-        state = "active";
-      } else if (hasClockIn) {
-        state = "clockedOut";
-      }
-
-      return {
-        state,
-        timer: state === "onBreak" ? (primaryTimer || currentTimer || dayTimer || weekTimer) : (currentTimer || primaryTimer || dayTimer || weekTimer),
-        currentTimer,
-        dayTimer,
-        weekTimer,
-        bodyPreview: bodyText.slice(0, 300)
-      };
+      const controls = 'button, [role="button"], input, a';
+      new MutationObserver(records => {
+        if (records.some(r => {
+          const el = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+          return el?.closest(controls) || [...r.addedNodes, ...r.removedNodes].some(n =>
+            n.nodeType === 1 && (n.matches(controls) || n.querySelector(controls)));
+        })) notify();
+      }).observe(document.body, {childList:true, subtree:true, characterData:true, attributes:true,
+                               attributeFilter:['hidden','disabled','aria-hidden']});
+      document.addEventListener('click', event => {
+        if (event.target.closest(controls)) { notify(); setTimeout(notify, 1000); }
+      }, true);
+      document.addEventListener('input', () => { window.__timeclockLastInput = Date.now(); }, true);
     })();
-    """
+    """#
+
+    static let detectionScript = #"""
+    (() => {
+      const normalize = value => (value || '').replace(/\s+/g, ' ').trim();
+      const visible = el => {
+        if (!el || el.closest('[hidden], [aria-hidden="true"]')) return false;
+        const style = getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+      };
+      const timePattern = /\b\d{1,3}:\d{2}(?:(?::|\.)\d{1,2})?\b/;
+      const cleanTimer = value => normalize(value).match(timePattern)?.[0] || '';
+      const controls = [...document.querySelectorAll('button, [role="button"], input[type="submit"], a')]
+        .filter(visible);
+      const label = el => normalize(el.innerText || el.value || el.getAttribute('aria-label')).toLowerCase();
+      const find = pattern => controls.find(el => pattern.test(label(el)));
+      const clockIn = find(/^clock\s*in$/);
+      const clockOut = find(/^clock\s*out$/);
+      const startBreak = find(/^(start|take)\s+(a\s+)?break$/);
+      const endBreak = find(/^(end break|resume|resume work|back from break)$/);
+      const attendance = endBreak || clockOut || startBreak || clockIn;
+      const login = find(/^(log\s*in|sign\s*in)( with .+)?$/);
+      const password = [...document.querySelectorAll('input[type="password"]')].some(visible);
+      const authRoute = /\/(login|sign-in|signin)(\/|$)/i.test(location.pathname);
+      // Keep extraction within the clock panel where possible. No body-wide wildcard traversal.
+      const root = attendance?.closest('[data-testid="time-clock"], [data-testid="timeclock"], aside, main, form')
+        || document.querySelector('aside') || document.querySelector('main') || document.body;
+      const text = normalize(root?.innerText);
+      const metric = name => text.match(new RegExp('\\b' + name + '\\s+(\\d{1,3}:\\d{2}(?:(?::|\\.)\\d{1,2})?)', 'i'))?.[1] || '';
+      const currentTimer = metric('Current'), dayTimer = metric('Day'), weekTimer = metric('Week');
+      let timer = '';
+      const candidates = root?.querySelectorAll('[data-testid*="timer"], [data-testid*="elapsed"], [class*="timer"], [class*="duration"], [class*="elapsed"], [id*="timer"]') || [];
+      for (const el of candidates) {
+        if (visible(el) && (timer = cleanTimer(el.innerText))) break;
+      }
+      const sidebar = document.querySelector('aside');
+      if (!timer && sidebar && /time clock/i.test(sidebar.innerText)) {
+        // Only a standalone value in the actual sidebar can provide the legacy fallback.
+        const el = [...sidebar.querySelectorAll('span, time, p')].find(el => visible(el) &&
+          cleanTimer(el.innerText) && normalize(el.innerText) === cleanTimer(el.innerText));
+        timer = el ? cleanTimer(el.innerText) : '';
+      }
+      let state = 'unknown';
+      if ((password || authRoute) && login) state = 'loginRequired';
+      else if (endBreak) state = 'onBreak';
+      else if (clockOut || startBreak) state = 'active';
+      else if (clockIn) state = 'clockedOut';
+      else if (login) state = 'loginRequired';
+      else if (timer && sidebar && /time clock/i.test(sidebar.innerText)) state = 'active';
+      return {state, timer: state === 'onBreak' ? (timer || currentTimer) : (currentTimer || timer),
+              currentTimer, dayTimer, weekTimer};
+    })();
+    """#
 }

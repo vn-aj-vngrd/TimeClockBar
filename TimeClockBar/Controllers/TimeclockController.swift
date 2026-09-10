@@ -23,12 +23,16 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     let workday = TimeclockReminderScheduler.workday
     @Published private(set) var workTimeZone = UserDefaults.standard.string(forKey: "workTimeZone") ?? TimeZone.current.identifier
     @Published private(set) var launchAtLoginError: String?
+    @Published private(set) var longOverdueSounds = UserDefaults.standard.bool(forKey: "longOverdueSounds")
     private var lastReminderReconciledAt = Date.distantPast
     let webView: WKWebView
     let dailyReportWebView: WKWebView
 
     @Published private(set) var state: TimeclockState = .loading
-    @Published private(set) var menuBarTitle: String = TimeclockState.loading.menuBarTitle
+    let menuBarTitles = PassthroughSubject<String, Never>()
+    private(set) var menuBarTitle: String = TimeclockState.loading.menuBarTitle {
+        didSet { menuBarTitles.send(menuBarTitle) }
+    }
     @Published private(set) var todayProgressTitle: String = ""
     @Published private(set) var displayComponents: Set<TimeclockDisplayComponent>
     @Published private(set) var displayLabelsEnabled: Bool
@@ -62,14 +66,22 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var requestedPopoverPage: PopoverPage?
 
     private var pollTimer: Timer?
-    private var stateReadGeneration = 0
+    private var monitoringActivity: NSObjectProtocol?
+    private var observation = TimeclockObservation()
+    private var lastReadAttempt = Date.distantPast
+    private var lastPageLoad = Date.distantPast
+    private var navigationStartedAt: Date?
+    private var nextRecoveryAt: Date?
+    private var recoveryAttempt = 0
+    private var bridge: TimeclockScriptBridge?
+    @Published private(set) var connectionStatus = "Checking Time Clock…"
+    private var overtimeRequestInFlight = false
+    private var nextOvertimeAttempt = Date.distantPast
     private var hasNavigationFailed = false
     private var lastDetection: TimeclockDOMDetection?
     private var timers = TimeclockTimers.empty
-    private var lastRunningTimerValue = ""
-    private var lastRunningTimerChangedAt = Date()
     private var hasSentLoginNotification = false
-    private var hasSentOvertimeNotification = false
+    private var nextLoginAttempt = Date.distantPast
     private var overtimeMinutes = 0
     private var reminderSoundPreviewPlayer: AVAudioPlayer?
 
@@ -101,7 +113,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private static let defaultHotkeyModifiers: NSEvent.ModifierFlags = [.control, .option, .command]
     private static let hotkeyModifierMask: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
     private static let pollingInterval: TimeInterval = 1
-    private static let staleTimerSeconds: TimeInterval = 120
+    private static let pageReadInterval: TimeInterval = 10
 
     var hotkeyLabel: String {
         HotkeyFormatting.label(keyCode: hotkeyKeyCode, modifiers: hotkeyModifierFlags)
@@ -130,7 +142,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         breakOverReminderEnabled = Self.savedBool(Self.breakOverReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderEnabled = Self.savedBool(Self.clockOutReminderEnabledDefaultsKey, defaultValue: true)
         clockOutReminderLeadMinutes = Self.savedMinutes(Self.clockOutReminderLeadMinutesDefaultsKey, defaultValue: 15)
-        overtimeReminderEnabled = Self.savedBool(Self.overtimeReminderEnabledDefaultsKey, defaultValue: true)
+        overtimeReminderEnabled = Self.savedBool(Self.overtimeReminderEnabledDefaultsKey, defaultValue: false)
         reminderSounds = Self.savedReminderSounds()
         previewingReminderKind = nil
         workingWeekdays = Self.savedWorkingWeekdays()
@@ -142,6 +154,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         if !isPreview { UserDefaults.standard.set(workTimeZone, forKey: "workTimeZone") }
 
         webView.navigationDelegate = self
+        let bridge = TimeclockScriptBridge(controller: self)
+        self.bridge = bridge
+        webView.configuration.userContentController.add(bridge, name: "timeclockChanged")
+        webView.configuration.userContentController.addUserScript(WKUserScript(
+            source: TimeclockDOMDetector.observationScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
     }
 
     func makeWebView(url: URL? = nil) -> WKWebView {
@@ -160,15 +177,14 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func reload() {
         guard !isPreview else { return }
-        stateReadGeneration += 1
-        state = .loading
-        scheduleReminders()
+        observation.invalidate()
+        state = observation.lastState == nil ? .loading : .stale
+        nextRecoveryAt = nil
+        hasNavigationFailed = false
 
-        if webView.url == nil {
-            load()
-        } else {
-            webView.reload()
-        }
+        // Always a GET to the overview; never replay the page's last attendance POST.
+        observation.resetMotion()
+        webView.load(URLRequest(url: url))
     }
 
     func loadDailyReport() {
@@ -362,7 +378,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
             delaySeconds: 5,
-            reminderSound: reminderSound(for: .breakOver)
+            reminderSound: reminderSound(for: .breakOver),
+            soundSeconds: longOverdueSounds ? 20 : 10
         )
     }
 
@@ -374,7 +391,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             body: "Sound check only. No attendance or report action is needed.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
             delaySeconds: 5,
-            reminderSound: reminderSound(for: .clockOut)
+            reminderSound: reminderSound(for: .clockOut),
+            soundSeconds: longOverdueSounds ? 20 : 10
         )
     }
 
@@ -474,7 +492,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         breakOverReminderEnabled = true
         clockOutReminderEnabled = true
         clockOutReminderLeadMinutes = 15
-        overtimeReminderEnabled = true
+        overtimeReminderEnabled = false
+        setLongOverdueSounds(false)
         reminderSounds = Self.defaultReminderSounds
         stopReminderSound()
         workingWeekdays = Self.defaultWorkingWeekdays
@@ -558,92 +577,170 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func startPolling() {
         guard !isPreview else { return }
-        guard pollTimer == nil else {
-            readTimeclockState()
-            return
-        }
-
+        guard pollTimer == nil else { return }
         isPolling = true
         readTimeclockState()
-
         let timer = Timer.scheduledTimer(withTimeInterval: Self.pollingInterval, repeats: true) { [weak self] _ in
-            self?.readTimeclockState()
+            self?.pollTick()
         }
+        timer.tolerance = 0.2
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
     }
 
     func stopPolling() {
-        stateReadGeneration += 1
+        observation.invalidate()
         pollTimer?.invalidate()
         pollTimer = nil
         isPolling = false
-        state = .stale
-        statusIndicator = .none
+        endMonitoringActivity()
+        nextRecoveryAt = nil
+        setUnavailable("Paused · waiting for connection or wake")
+    }
+
+    private func pollTick() {
+        let now = Date()
+        if observation.isTimedOut(at: now) {
+            observation.invalidate()
+            queueRecovery("Time Clock stopped responding")
+        }
+        if let started = navigationStartedAt, now.timeIntervalSince(started) >= 30 {
+            navigationStartedAt = nil
+            webView.stopLoading()
+            queueRecovery("Time Clock took too long to load")
+        }
+        if let retry = nextRecoveryAt, now >= retry, !webView.isLoading {
+            nextRecoveryAt = nil
+            hasNavigationFailed = false
+            reload()
+            return
+        }
+        if now.timeIntervalSince(lastReadAttempt) >= Self.pageReadInterval { readTimeclockState() }
+        if now.timeIntervalSince(lastReminderReconciledAt) >= 30 {
+            scheduleReminders()
+            handleOvertimeNotification(for: state)
+        }
+        // Refresh remote data only while the clock page is not being used.
+        if now.timeIntervalSince(lastPageLoad) >= 60, nextRecoveryAt == nil,
+           webView.window?.isVisible != true, state != .loginRequired, !webView.isLoading,
+           observation.token == nil {
+            refreshRemoteWhenIdle(at: now)
+            return
+        }
+        if let observed = observation.observedAt, now.timeIntervalSince(observed) > 30,
+           Self.isWorking(state) || state == .clockedOut {
+            setUnavailable("Status needs verification")
+        }
         updateMenuBarTitle()
-        scheduleReminders()
+    }
+
+    private func refreshRemoteWhenIdle(at now: Date) {
+        guard let token = observation.begin(at: now) else { return }
+        lastPageLoad = now
+        // A hidden page can still contain unfinished input. Never discard it automatically.
+        let script = "!window.__timeclockLastInput && !document.activeElement?.matches('input, textarea, [contenteditable=true]')"
+        webView.evaluateJavaScript(script) { [weak self] result, error in
+            guard let self, self.isPolling, self.observation.finish(token), error == nil,
+                  result as? Bool == true, self.webView.window?.isVisible != true else { return }
+            self.reload()
+        }
     }
 
     func readTimeclockState() {
-        guard !isPreview else { return }
-        guard isPolling, !hasNavigationFailed, webView.url != nil, !webView.isLoading else { return }
-        let generation = stateReadGeneration
-
+        guard !isPreview, isPolling, !hasNavigationFailed, webView.url != nil,
+              !webView.isLoading, nextRecoveryAt == nil,
+              let token = observation.begin(at: Date()) else { return }
+        lastReadAttempt = Date()
         webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript) { [weak self] result, error in
-            guard let self, self.isPolling, self.stateReadGeneration == generation else { return }
-
-            if error != nil {
-                self.state = .stale
-                self.timers = .empty
-                self.todayProgressTitle = ""
-                self.statusIndicator = .none
-                self.updateMenuBarTitle()
-                self.scheduleReminders()
-                return
-            }
-
-            self.lastRefreshedAt = Date()
+            guard let self, self.isPolling, self.observation.finish(token) else { return }
+            guard error == nil else { self.queueRecovery("Could not read Time Clock"); return }
             let detection = TimeclockDOMDetection(result as? [String: Any])
-            self.lastDetection = detection
             let nextTimers = TimeclockDOMDetector.timers(from: detection)
             let nextState = self.parseState(from: detection)
             let previousState = self.state
             let wasOvertime = self.overtimeMinutes > 0
-            self.timers = nextTimers
-            self.updateTodayProgressTitle()
-            self.handleLoginNotification(for: nextState)
-            let resolvedState = self.stateWithStaleCheck(nextState, timers: nextTimers)
-            if resolvedState == .stale {
+            if nextState == .loginRequired {
+                self.state = .loginRequired
+                self.endMonitoringActivity()
+                self.connectionStatus = "Sign in on Time Clock to restore status updates."
+                self.handleLoginNotification(for: nextState)
+            } else if self.observation.accept(nextState, timers: nextTimers, at: Date()) {
+                self.lastDetection = detection
+                self.lastRefreshedAt = self.observation.observedAt
+                self.timers = nextTimers
+                self.state = nextState
+                if Self.isWorking(nextState) && self.monitoringActivity == nil {
+                    self.monitoringActivity = ProcessInfo.processInfo.beginActivity(
+                        options: .userInitiatedAllowingIdleSystemSleep, reason: "Monitor the current Time Clock work session")
+                } else if !Self.isWorking(nextState) { self.endMonitoringActivity() }
+                self.connectionStatus = "Status observed from Time Clock · timer estimated between reads"
+                self.recoveryAttempt = 0
+                self.nextRecoveryAt = nil
+                self.handleLoginNotification(for: nextState)
+                self.updateTodayProgressTitle()
+            } else {
+                self.queueRecovery("Clock status could not be verified")
+                return
+            }
+            if self.state == .loginRequired {
                 self.todayProgressTitle = ""
                 self.overtimeMinutes = 0
-                self.statusIndicator = .none
             }
-            self.state = resolvedState
             self.updateStatusIndicator()
             self.updateMenuBarTitle()
-            if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(resolvedState)
+            if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(self.state)
                 || wasOvertime != (self.overtimeMinutes > 0)
                 || Date().timeIntervalSince(self.lastReminderReconciledAt) >= 30 {
                 self.scheduleReminders()
             }
-            self.handleOvertimeNotification(for: resolvedState)
+            self.handleOvertimeNotification(for: self.state)
         }
     }
 
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        stateReadGeneration += 1
-        state = .loading
+    private func endMonitoringActivity() {
+        if let activity = monitoringActivity { ProcessInfo.processInfo.endActivity(activity) }
+        monitoringActivity = nil
+    }
+
+    private func setUnavailable(_ message: String) {
+        endMonitoringActivity()
+        let changed = state != .stale
+        state = .stale
+        let previous = observation.lastState.map { " · Last known: \($0.headerTitle)" } ?? ""
+        connectionStatus = message + previous
+        todayProgressTitle = ""
+        overtimeMinutes = 0
+        statusIndicator = .none
         updateMenuBarTitle()
-        scheduleReminders()
+        if changed { scheduleReminders() }
+    }
+
+    private func queueRecovery(_ message: String) {
+        setUnavailable(message + " · Reconnecting")
+        guard isPolling, nextRecoveryAt == nil else { return }
+        let delays: [TimeInterval] = [2, 5, 15, 60]
+        nextRecoveryAt = Date().addingTimeInterval(delays[min(recoveryAttempt, delays.count - 1)])
+        recoveryAttempt += 1
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        observation.invalidate()
+        navigationStartedAt = Date()
+        lastPageLoad = Date()
+        hasNavigationFailed = false
+        if observation.lastState == nil { state = .loading }
+        else { state = .stale }
+        connectionStatus = "Refreshing Time Clock…" + (observation.lastState.map { " · Last known: \($0.headerTitle)" } ?? "")
+        statusIndicator = .none
+        updateMenuBarTitle()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        stateReadGeneration += 1
+        guard (error as NSError).code != NSURLErrorCancelled else { return }
+        observation.invalidate()
+        navigationStartedAt = nil
         hasNavigationFailed = true
-        state = .stale
-        lastRefreshedAt = nil
-        updateMenuBarTitle()
-        scheduleReminders()
+        queueRecovery("Time Clock could not load")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -651,8 +748,17 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        navigationStartedAt = nil
         hasNavigationFailed = false
+        nextRecoveryAt = nil
+        observation.resetMotion()
         readTimeclockState()
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        observation.invalidate()
+        navigationStartedAt = nil
+        queueRecovery("Time Clock restarted unexpectedly")
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -669,8 +775,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return .unknown(nil)
         }
 
-        let timer = firstNonEmpty(detection.currentTimer, detection.dayTimer, detection.weekTimer, detection.timer)
-        let breakTimer = firstNonEmpty(detection.timer, detection.currentTimer, detection.dayTimer, detection.weekTimer)
+        let timer = firstNonEmpty(detection.currentTimer, detection.timer)
+        let breakTimer = firstNonEmpty(detection.timer, detection.currentTimer)
 
         switch detection.state {
         case "loginRequired":
@@ -691,20 +797,27 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func updateMenuBarTitle() {
-        menuBarTitle = TimeclockMenuTitleFormatter.title(
-            state: state,
-            timers: timers,
+        let displayedTimers = Self.isWorking(state) ? observation.displayTimers(at: Date()) : (state == .clockedOut ? timers : .empty)
+        let displayedState: TimeclockState
+        if case .onBreak = state { displayedState = .onBreak(displayedTimers.fallback) }
+        else { displayedState = state }
+        let title = state == .stale ? (isPolling ? "Checking" : "Paused") : TimeclockMenuTitleFormatter.title(
+            state: displayedState,
+            timers: displayedTimers,
             components: displayComponents,
             remainingTitle: todayProgressTitle,
             statusOverride: statusIndicator.title,
             showsLabels: displayLabelsEnabled
         )
+        if menuBarTitle != title { menuBarTitle = title }
     }
 
     private func updateTodayProgressTitle() {
         let parsedDayMinutes = TimeclockTimeMath.timerMinutes(from: timers.day.isEmpty ? timers.fallback : timers.day)
 
-        guard workingWeekdays.contains(Calendar.current.component(.weekday, from: Date())) else {
+        let now = Date()
+        guard let shift = workSchedule.currentShift(at: now), now >= shift.start,
+              now < shift.end.addingTimeInterval(4 * 3600) else {
             let dayMinutes = parsedDayMinutes ?? 0
             todayProgressTitle = dayMinutes > 0 ? "Today +\(TimeclockTimeMath.durationLabel(minutes: dayMinutes))" : "Off today"
             overtimeMinutes = 0
@@ -736,68 +849,65 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         }
     }
 
-    private func stateWithStaleCheck(_ state: TimeclockState, timers: TimeclockTimers) -> TimeclockState {
-        let timerValue = Self.runningTimerValue(state: state, timers: timers)
-        let now = Date()
-
-        if timerValue.isEmpty {
-            lastRunningTimerValue = ""
-            lastRunningTimerChangedAt = now
-            return state
-        }
-
-        if timerValue != lastRunningTimerValue {
-            lastRunningTimerValue = timerValue
-            lastRunningTimerChangedAt = now
-            return state
-        }
-
-        return now.timeIntervalSince(lastRunningTimerChangedAt) > Self.staleTimerSeconds ? .stale : state
-    }
-
     private func updateStatusIndicator() {
+        let now = Date()
         statusIndicator = TimeclockStatusIndicator.indicator(
             state: state,
             breakDurationMinutes: breakDurationMinutes,
-            overtimeMinutes: overtimeMinutes
+            overtimeMinutes: overtimeMinutes,
+            shiftEnded: workSchedule.currentShift(at: now).map { now >= $0.end } ?? false
         )
     }
 
     private func handleLoginNotification(for state: TimeclockState) {
         guard state == .loginRequired else {
-            hasSentLoginNotification = false
+            if Self.isWorking(state) || state == .clockedOut { hasSentLoginNotification = false }
             return
         }
 
-        guard !hasSentLoginNotification else { return }
-
+        guard !hasSentLoginNotification, Date() >= nextLoginAttempt else { return }
+        nextLoginAttempt = Date().addingTimeInterval(60)
         hasSentLoginNotification = true
         TimeclockReminderScheduler.sendNotification(
             identifier: TimeclockReminderScheduler.loginRequiredNotificationIdentifier,
             title: "Time Clock Bar login expired",
             body: "Open Time Clock Bar to sign in again.",
-            categoryIdentifier: TimeclockReminderScheduler.loginRequiredCategoryIdentifier
+            categoryIdentifier: TimeclockReminderScheduler.loginRequiredCategoryIdentifier,
+            completion: { [weak self] queued in
+                if !queued { self?.hasSentLoginNotification = false }
+            }
         )
     }
 
+    private var overtimeSilenceKey: String {
+        "overtimeSilenced.v1." + (workSchedule.currentShift(at: Date())?.id ?? WorkdaySchedule.dateString(Date()))
+    }
+
     private func handleOvertimeNotification(for state: TimeclockState) {
+        guard !isPreview, !UserDefaults.standard.bool(forKey: overtimeSilenceKey) else { return }
         guard overtimeReminderEnabled, overtimeMinutes > 0, Self.isWorking(state) else {
-            hasSentOvertimeNotification = false
             return
         }
 
         let workDate = workSchedule.currentShift(at: Date())?.id ?? WorkdaySchedule.dateString(Date())
-        let budgetKey = "overtimeNotified.v1." + workDate
-        guard !hasSentOvertimeNotification, !UserDefaults.standard.bool(forKey: budgetKey) else { return }
-        UserDefaults.standard.set(true, forKey: budgetKey)
-
-        hasSentOvertimeNotification = true
+        let budgetKey = "overtimeQueued.v2." + workDate
+        guard !overtimeRequestInFlight, Date() >= nextOvertimeAttempt,
+              !UserDefaults.standard.bool(forKey: budgetKey) else { return }
+        if clockOutReminderEnabled, let shift = workSchedule.currentShift(at: Date()),
+           Date() >= shift.end.addingTimeInterval(-15 * 60) { return }
+        overtimeRequestInFlight = true
+        nextOvertimeAttempt = Date().addingTimeInterval(60)
         TimeclockReminderScheduler.sendNotification(
             identifier: TimeclockReminderDelivery.overtimeOwner,
-            title: "Overtime",
+            title: "Hours target reached",
             body: "You are over today's work-hours target by \(TimeclockTimeMath.durationLabel(minutes: overtimeMinutes)). Open Time Clock to review your clock-out status.",
             categoryIdentifier: TimeclockReminderScheduler.reminderCategoryIdentifier,
-            reminderSound: reminderSound(for: .overtime)
+            reminderSound: reminderSound(for: .overtime),
+            completion: { [weak self] queued in
+                self?.overtimeRequestInFlight = false
+                guard queued else { return }
+                UserDefaults.standard.set(true, forKey: budgetKey)
+            }
         )
     }
 
@@ -805,6 +915,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         WorkdaySchedule(timeZone: TimeZone(identifier: workTimeZone) ?? .current, weekdays: workingWeekdays,
                         startMinutes: workStartMinutes, endMinutes: workEndMinutes,
                         breakMinutes: breakReminderMinutes, breakDuration: breakDurationMinutes)
+    }
+
+    func setLongOverdueSounds(_ enabled: Bool) {
+        longOverdueSounds = enabled
+        UserDefaults.standard.set(enabled, forKey: "longOverdueSounds")
+        scheduleReminders()
     }
 
     func setWorkTimeZone(_ identifier: String) {
@@ -816,7 +932,14 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func silenceReminder(_ request: UNNotificationRequest) {
         guard !isPreview, let owner = TimeclockReminderDelivery.owner(request) else { return }
-        workday.silence(owner: owner)
+        if owner == TimeclockReminderDelivery.overtimeOwner {
+            UserDefaults.standard.set(true, forKey: overtimeSilenceKey)
+        } else { workday.silence(owner: owner) }
+        scheduleReminders()
+    }
+
+    func resumeCheckpoint(_ checkpoint: WorkdayCheckpoint) {
+        workday.resume(checkpoint)
         scheduleReminders()
     }
 
@@ -845,7 +968,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             breakReminderSound: reminderSound(for: .breakStart),
             breakOverReminderSound: reminderSound(for: .breakOver),
             clockOutReminderSound: reminderSound(for: .clockOut),
-            allowsOvertime: overtimeReminderEnabled && overtimeMinutes > 0 && Self.isWorking(state),
+            allowsOvertime: overtimeReminderEnabled && overtimeMinutes > 0 && Self.isWorking(state)
+                && !UserDefaults.standard.bool(forKey: overtimeSilenceKey),
             overtimeReminderEnabled: overtimeReminderEnabled
         )
     }
@@ -861,7 +985,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private func playReminderSound(_ sound: TimeclockReminderSound, previewing kind: TimeclockReminderKind?) {
         stopReminderSound()
 
-        guard let url = Bundle.main.url(forResource: sound.rawValue, withExtension: "wav"),
+        let name = longOverdueSounds && (kind == .breakOver || kind == .clockOut) ? "\(sound.rawValue)-20" : sound.rawValue
+        guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
               let player = try? AVAudioPlayer(contentsOf: url) else {
             return
         }
@@ -976,5 +1101,15 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         return configuration
+    }
+}
+
+/// WKUserContentController retains its handler; keep the controller reference weak.
+private final class TimeclockScriptBridge: NSObject, WKScriptMessageHandler {
+    weak var controller: TimeclockController?
+    init(controller: TimeclockController) { self.controller = controller }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, message.webView === controller?.webView else { return }
+        controller?.readTimeclockState()
     }
 }
