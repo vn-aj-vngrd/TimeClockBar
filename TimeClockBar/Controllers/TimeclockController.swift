@@ -660,6 +660,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             if nextState == .loginRequired {
                 self.state = .loginRequired
                 self.pageRecovery.verified()
+                self.navigationStartedAt = nil
                 self.endMonitoringActivity()
                 self.connectionStatus = "Sign in on Time Clock to restore status updates."
                 self.handleLoginNotification(for: nextState)
@@ -674,10 +675,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 } else if !Self.isWorking(nextState) { self.endMonitoringActivity() }
                 self.connectionStatus = "Status observed from Time Clock · timer estimated between reads"
                 self.pageRecovery.verified()
+                self.navigationStartedAt = nil
                 self.handleLoginNotification(for: nextState)
                 self.updateTodayProgressTitle()
             } else {
-                self.queueRecovery("Clock status could not be verified")
+                self.queueRecovery("Clock status could not be verified", waitForContent: true)
                 return
             }
             if self.state == .loginRequired {
@@ -716,13 +718,13 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         if changed { scheduleReminders() }
     }
 
-    private func queueRecovery(_ message: String) {
+    private func queueRecovery(_ message: String, waitForContent: Bool = false) {
         if isPolling, pageRecovery.retryAt == nil {
             monitoringLogger.notice("Clock recovery scheduled: \(message, privacy: .public)")
         }
         setUnavailable(message + " · Reconnecting")
         guard isPolling else { return }
-        pageRecovery.schedule(at: Date())
+        pageRecovery.schedule(at: Date(), minimumDelay: waitForContent ? 30 : 0)
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -749,9 +751,14 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         self.webView(webView, didFail: navigation, withError: error)
     }
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        pageRecovery.navigationCommitted()
+        readTimeclockState()
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         navigationStartedAt = nil
-        pageRecovery.navigationStarted()
+        pageRecovery.navigationCommitted()
         observation.resetMotion()
         readTimeclockState()
     }

@@ -72,10 +72,14 @@ enum TimeclockDOMDetector {
         .filter(visible);
       const label = el => normalize(el.innerText || el.value || el.getAttribute('aria-label')).toLowerCase();
       const find = pattern => controls.find(el => pattern.test(label(el)));
-      const clockIn = find(/^clock\s*in$/);
-      const clockOut = find(/^clock\s*out$/);
-      const startBreak = find(/^(start|take)\s+(a\s+)?break$/);
-      const endBreak = find(/^(end break|resume|resume work|back from break)$/);
+      const enabled = el => !el.disabled && el.getAttribute('aria-disabled') !== 'true';
+      const findAttendance = pattern => controls.find(el => enabled(el) && pattern.test(label(el)));
+      const pendingAttendance = controls.some(el => !enabled(el) &&
+        /^(clock\s*(in|out)|(start|take)\s+(a\s+)?break|end break|resume|resume work|back from break)$/.test(label(el)));
+      const clockIn = findAttendance(/^clock\s*in$/);
+      const clockOut = findAttendance(/^clock\s*out$/);
+      const startBreak = findAttendance(/^(start|take)\s+(a\s+)?break$/);
+      const endBreak = findAttendance(/^(end break|resume|resume work|back from break)$/);
       const attendance = endBreak || clockOut || startBreak || clockIn;
       const login = find(/^(log\s*in|sign\s*in)( with .+)?$/);
       const password = [...document.querySelectorAll('input[type="password"]')].some(visible);
@@ -104,7 +108,7 @@ enum TimeclockDOMDetector {
       else if (clockOut || startBreak) state = 'active';
       else if (clockIn) state = 'clockedOut';
       else if (login) state = 'loginRequired';
-      else if (timer && sidebar && /time clock/i.test(sidebar.innerText)) state = 'active';
+      else if (!pendingAttendance && timer && sidebar && /time clock/i.test(sidebar.innerText)) state = 'active';
       return {state, timer: state === 'onBreak' ? (timer || currentTimer) : (currentTimer || timer),
               currentTimer, dayTimer, weekTimer};
     })();

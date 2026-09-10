@@ -5,16 +5,17 @@ struct TimeclockPageRecovery {
     private(set) var retryAt: Date?
     private var attempt = 0
     private var navigationFailed = false
+    private var documentCommitted = false
 
     func allowsRead(isLoading: Bool) -> Bool {
         // A reload is only a fallback. The site's clock may render after didFinish.
-        !isLoading && !navigationFailed
+        (!isLoading || documentCommitted) && !navigationFailed
     }
 
-    mutating func schedule(at now: Date) {
+    mutating func schedule(at now: Date, minimumDelay: TimeInterval = 0) {
         guard retryAt == nil else { return }
         let delays: [TimeInterval] = [2, 5, 15, 60]
-        retryAt = now.addingTimeInterval(delays[min(attempt, delays.count - 1)])
+        retryAt = now.addingTimeInterval(max(minimumDelay, delays[min(attempt, delays.count - 1)]))
         attempt += 1
     }
 
@@ -22,13 +23,20 @@ struct TimeclockPageRecovery {
 
     mutating func navigationStarted() {
         navigationFailed = false
+        documentCommitted = false
         cancel()
+    }
+
+    mutating func navigationCommitted() {
+        documentCommitted = true
+        navigationFailed = false
     }
 
     mutating func navigationDidFail() { navigationFailed = true }
 
     mutating func verified() {
-        navigationStarted()
+        navigationFailed = false
+        cancel()
         attempt = 0
     }
 }

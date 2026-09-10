@@ -1,6 +1,6 @@
 # Testing
 
-The checking-loop regression uses `TimeclockPageRecoveryTests` and a local WebKit fixture that renders attendance controls after navigation finishes. It verifies that a pending fallback reload allows a new read, fresh state cancels recovery, failed/loading navigations remain blocked, and repeated unknown reads do not postpone the deadline. A floating-panel fixture mirrors the publicly served Full Scale component's separate seconds span, which must parse `02:55. 45` as `02:55.45`.
+The checking-loop regression uses `TimeclockPageRecoveryTests` and a local WebKit fixture that renders attendance controls after navigation finishes. It verifies that a pending fallback reload allows a new read, fresh state cancels recovery, failed/provisional navigations remain blocked, committed documents can be read while secondary resources load, and repeated unknown reads do not postpone the deadline. Disabled controls during hydration must not confirm clock-in/out or break state. A floating-panel fixture mirrors the publicly served Full Scale component's separate seconds span, which must parse `02:55. 45` as `02:55.45`.
 
 The project has a hosted macOS XCTest bundle named `TimeClockBarTests`.
 

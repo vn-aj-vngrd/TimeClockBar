@@ -184,6 +184,16 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         recovery.verified()
         XCTAssertNil(recovery.retryAt)
     }
+
+    func testDisabledClockInWhileSessionLoadsDoesNotConfirmClockedOut() async throws {
+        let value = try await detect(html: "<main><p>Current 00:00</p><button id='clock-in' disabled>Clock In</button></main>")
+        XCTAssertEqual(value.state, "unknown")
+    }
+
+    func testDisabledAttendanceControlsDoNotConfirmWorkingOrBreak() async throws {
+        let value = try await detect(html: "<main><button aria-disabled='true'>End Break</button><button disabled>Clock Out</button></main>")
+        XCTAssertEqual(value.state, "unknown")
+    }
 }
 
 @MainActor

@@ -39,4 +39,26 @@ final class TimeclockPageRecoveryTests: XCTestCase {
         recovery.schedule(at: now)
         XCTAssertEqual(recovery.retryAt, now.addingTimeInterval(2))
     }
+
+    func testCommittedClockCanBeReadWhileSecondaryResourcesStillLoad() {
+        var recovery = TimeclockPageRecovery()
+        recovery.navigationStarted()
+        XCTAssertFalse(recovery.allowsRead(isLoading: true))
+        recovery.navigationCommitted()
+        XCTAssertTrue(recovery.allowsRead(isLoading: true))
+        recovery.verified()
+        XCTAssertTrue(recovery.allowsRead(isLoading: true))
+        recovery.navigationDidFail()
+        XCTAssertFalse(recovery.allowsRead(isLoading: true))
+    }
+
+    func testHydrationGetsTimeToRenderWithoutResettingDeadlineOnEveryRead() {
+        var recovery = TimeclockPageRecovery()
+        let now = Date(timeIntervalSince1970: 1000)
+        recovery.schedule(at: now, minimumDelay: 30)
+        XCTAssertEqual(recovery.retryAt, now.addingTimeInterval(30))
+        recovery.schedule(at: now.addingTimeInterval(10), minimumDelay: 30)
+        XCTAssertEqual(recovery.retryAt, now.addingTimeInterval(30))
+        XCTAssertTrue(recovery.allowsRead(isLoading: false))
+    }
 }
