@@ -63,6 +63,12 @@ struct TimeclockObservation {
 
     mutating func resetMotion() { runningValue = ""; runningChangedAt = nil }
 
+    func displayState(current: TimeclockState, refreshing: Bool, at now: Date) -> TimeclockState {
+        guard refreshing, current == .stale, let lastState, let observedAt,
+              (0...30).contains(now.timeIntervalSince(observedAt)) else { return current }
+        return lastState
+    }
+
     func displayTimers(at now: Date) -> TimeclockTimers {
         guard let observedAt, let lastState else { return timers }
         func advance(_ text: String, key: String) -> String {

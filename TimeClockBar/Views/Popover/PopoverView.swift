@@ -141,8 +141,9 @@ struct PopoverView: View {
             return "Offline"
         }
 
+        if controller.isRefreshing { return "Refreshing" }
         if controller.state == .stale {
-            return "Stale"
+            return "Unavailable"
         }
 
         return controller.statusIndicator.title
@@ -154,8 +155,9 @@ struct PopoverView: View {
             return "Polling paused"
         }
 
+        if controller.isRefreshing { return "Refreshing the website · Showing your last confirmed status" }
         if controller.state == .stale {
-            return "Status stale"
+            return "The latest clock status could not be verified"
         }
 
         return controller.statusIndicator.help

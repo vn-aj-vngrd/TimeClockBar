@@ -2,6 +2,29 @@ import XCTest
 @testable import Time_Clock_Bar
 
 final class TimeclockObservationTests: XCTestCase {
+    func testRoutineRefreshKeepsLastConfirmedAttendanceWithoutAdvancingFreshness() {
+        let now = Date(timeIntervalSince1970: 1000)
+        for state in [TimeclockState.clockedOut, .active("01:00:00"), .onBreak("00:15:00")] {
+            var observation = TimeclockObservation()
+            XCTAssertTrue(observation.accept(state, timers: .empty, at: now))
+            observation.invalidate()
+            XCTAssertFalse(observation.accept(.unknown(nil), timers: .empty, at: now.addingTimeInterval(10)))
+            XCTAssertEqual(observation.displayState(current: .stale, refreshing: true, at: now.addingTimeInterval(20)), state)
+            XCTAssertEqual(observation.observedAt, now)
+        }
+    }
+
+    func testRefreshCannotHideFailureLoginExpiryOrOldObservation() {
+        var observation = TimeclockObservation()
+        let now = Date(timeIntervalSince1970: 1000)
+        XCTAssertEqual(observation.displayState(current: .loading, refreshing: true, at: now), .loading)
+        XCTAssertTrue(observation.accept(.clockedOut, timers: .empty, at: now))
+        XCTAssertEqual(observation.displayState(current: .stale, refreshing: false, at: now.addingTimeInterval(1)), .stale)
+        XCTAssertEqual(observation.displayState(current: .loginRequired, refreshing: true, at: now.addingTimeInterval(1)), .loginRequired)
+        XCTAssertEqual(observation.displayState(current: .stale, refreshing: true, at: now.addingTimeInterval(31)), .stale)
+        XCTAssertEqual(observation.displayState(current: .stale, refreshing: true, at: now.addingTimeInterval(-1)), .stale)
+    }
+
     func testOverlapTimeoutAndLateResultAfterRecovery() throws {
         var observation = TimeclockObservation()
         let now = Date(timeIntervalSince1970: 1000)

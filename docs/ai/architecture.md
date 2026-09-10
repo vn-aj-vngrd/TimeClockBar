@@ -2,6 +2,8 @@
 
 Clock-page reload backoff is owned by `TimeclockPageRecovery`. A queued reload must not block reads: the site's attendance controls render asynchronously. Read the new document after commit even if secondary resources are still loading; provisional/failed navigations cannot reuse the previous document. A fresh verified observation cancels both the fallback reload and navigation watchdog. Unknown content gets at least thirty seconds to render while reads continue. Disabled attendance controls do not establish completion during session hydration. `ClockMonitoring` logs recovery transitions without page content, account identifiers, or timer values.
 
+Routine refreshes separate presentation from verification. `state` becomes unverified immediately and remains the sole input to reminder decisions. The menu bar and Today use `displayState`, which may preserve the last confirmed attendance during a healthy refresh for at most thirty seconds from the original observation. The popover labels this “Refreshing”; source freshness is never advanced by displaying cached state. Login, navigation/read errors, offline/sleep, or expiry end that display grace immediately. A retry after an actual failure cannot revive cached attendance. A known but unverified status is labeled “Unavailable,” rather than an endless “Checking.”
+
 Time Clock Bar is a single-target macOS SwiftUI app with AppKit integration for menu-bar behavior.
 
 ## Main Flow

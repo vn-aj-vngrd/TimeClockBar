@@ -30,6 +30,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     let dailyReportWebView: WKWebView
 
     @Published private(set) var state: TimeclockState = .loading
+    @Published private(set) var isRefreshing = false
+    /// Presentation only. Reminder decisions always use `state`, never cached display evidence.
+    var displayState: TimeclockState {
+        observation.displayState(current: state, refreshing: isRefreshing, at: Date())
+    }
     let menuBarTitles = PassthroughSubject<String, Never>()
     private(set) var menuBarTitle: String = TimeclockState.loading.menuBarTitle {
         didSet { menuBarTitles.send(menuBarTitle) }
@@ -177,8 +182,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func reload() {
         guard !isPreview else { return }
-        observation.invalidate()
-        state = observation.lastState == nil ? .loading : .stale
+        beginPageRefresh()
         pageRecovery.navigationStarted()
 
         // Always a GET to the overview; never replay the page's last attendance POST.
@@ -599,6 +603,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     private func pollTick() {
         let now = Date()
+        if isRefreshing, observation.displayState(current: state, refreshing: true, at: now) == .stale {
+            setUnavailable("Status needs verification")
+        }
         if observation.isTimedOut(at: now) {
             observation.invalidate()
             queueRecovery("Time Clock stopped responding")
@@ -658,6 +665,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             let previousState = self.state
             let wasOvertime = self.overtimeMinutes > 0
             if nextState == .loginRequired {
+                self.isRefreshing = false
                 self.state = .loginRequired
                 self.pageRecovery.verified()
                 self.navigationStartedAt = nil
@@ -665,6 +673,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 self.connectionStatus = "Sign in on Time Clock to restore status updates."
                 self.handleLoginNotification(for: nextState)
             } else if self.observation.accept(nextState, timers: nextTimers, at: Date()) {
+                self.isRefreshing = false
                 self.lastDetection = detection
                 self.lastRefreshedAt = self.observation.observedAt
                 self.timers = nextTimers
@@ -706,6 +715,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func setUnavailable(_ message: String) {
+        isRefreshing = false
         endMonitoringActivity()
         let changed = state != .stale
         state = .stale
@@ -719,24 +729,40 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func queueRecovery(_ message: String, waitForContent: Bool = false) {
-        if isPolling, pageRecovery.retryAt == nil {
+        let keepLastConfirmed = waitForContent && isRefreshing && displayState != .stale
+        if isPolling, pageRecovery.retryAt == nil, !keepLastConfirmed {
             monitoringLogger.notice("Clock recovery scheduled: \(message, privacy: .public)")
         }
-        setUnavailable(message + " · Reconnecting")
+        if !keepLastConfirmed { setUnavailable(message + " · Reconnecting") }
         guard isPolling else { return }
         pageRecovery.schedule(at: Date(), minimumDelay: waitForContent ? 30 : 0)
     }
 
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+    private func beginPageRefresh() {
+        let previousState = state
+        let canPreserve = isRefreshing || Self.isWorking(state) || state == .clockedOut
+        let wasRefreshing = isRefreshing
         observation.invalidate()
+        state = observation.lastState == nil ? .loading : .stale
+        isRefreshing = canPreserve && observation.displayState(current: state, refreshing: true, at: Date()) != state
+        if isRefreshing {
+            connectionStatus = "Refreshing Time Clock… · Showing last confirmed status"
+            if !wasRefreshing {
+                monitoringLogger.info("Refresh keeps last confirmed display: \(Self.reminderSchedulingState(self.displayState), privacy: .public)")
+            }
+        } else {
+            connectionStatus = "Checking Time Clock…" + (observation.lastState.map { " · Last known: \($0.headerTitle)" } ?? "")
+        }
+        statusIndicator = .none
+        updateMenuBarTitle()
+        if previousState != state { scheduleReminders() }
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        beginPageRefresh()
         navigationStartedAt = Date()
         lastPageLoad = Date()
         pageRecovery.navigationStarted()
-        if observation.lastState == nil { state = .loading }
-        else { state = .stale }
-        connectionStatus = "Refreshing Time Clock…" + (observation.lastState.map { " · Last known: \($0.headerTitle)" } ?? "")
-        statusIndicator = .none
-        updateMenuBarTitle()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -805,11 +831,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func updateMenuBarTitle() {
-        let displayedTimers = Self.isWorking(state) ? observation.displayTimers(at: Date()) : (state == .clockedOut ? timers : .empty)
+        let visibleState = displayState
+        let displayedTimers = Self.isWorking(visibleState) ? observation.displayTimers(at: Date()) : (visibleState == .clockedOut ? timers : .empty)
         let displayedState: TimeclockState
-        if case .onBreak = state { displayedState = .onBreak(displayedTimers.fallback) }
-        else { displayedState = state }
-        let title = state == .stale ? (isPolling ? "Checking" : "Paused") : TimeclockMenuTitleFormatter.title(
+        if case .onBreak = visibleState { displayedState = .onBreak(displayedTimers.fallback) }
+        else { displayedState = visibleState }
+        let title = visibleState == .stale ? (isPolling ? (observation.lastState == nil ? "Checking" : "Unavailable") : "Paused") : TimeclockMenuTitleFormatter.title(
             state: displayedState,
             timers: displayedTimers,
             components: displayComponents,

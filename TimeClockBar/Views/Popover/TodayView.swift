@@ -8,7 +8,7 @@ struct TodayView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let dashboard = TodayDashboard.resolve(state: controller.state, schedule: controller.workSchedule,
+            let dashboard = TodayDashboard.resolve(state: controller.displayState, schedule: controller.workSchedule,
                                                    checkpoints: workday.checkpoints, now: context.date)
             let shift = controller.workSchedule.currentShift(at: context.date)
             ScrollView {
