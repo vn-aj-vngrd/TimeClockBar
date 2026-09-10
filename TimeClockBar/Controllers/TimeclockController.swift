@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Combine
 import Foundation
+import OSLog
 import ServiceManagement
 import UserNotifications
 import WebKit
@@ -71,13 +72,12 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private var lastReadAttempt = Date.distantPast
     private var lastPageLoad = Date.distantPast
     private var navigationStartedAt: Date?
-    private var nextRecoveryAt: Date?
-    private var recoveryAttempt = 0
+    private var pageRecovery = TimeclockPageRecovery()
+    private let monitoringLogger = Logger(subsystem: "com.vanajvanguardia.TimeClockBar", category: "ClockMonitoring")
     private var bridge: TimeclockScriptBridge?
     @Published private(set) var connectionStatus = "Checking Time Clock…"
     private var overtimeRequestInFlight = false
     private var nextOvertimeAttempt = Date.distantPast
-    private var hasNavigationFailed = false
     private var lastDetection: TimeclockDOMDetection?
     private var timers = TimeclockTimers.empty
     private var hasSentLoginNotification = false
@@ -179,8 +179,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         guard !isPreview else { return }
         observation.invalidate()
         state = observation.lastState == nil ? .loading : .stale
-        nextRecoveryAt = nil
-        hasNavigationFailed = false
+        pageRecovery.navigationStarted()
 
         // Always a GET to the overview; never replay the page's last attendance POST.
         observation.resetMotion()
@@ -594,7 +593,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         pollTimer = nil
         isPolling = false
         endMonitoringActivity()
-        nextRecoveryAt = nil
+        pageRecovery.cancel()
         setUnavailable("Paused · waiting for connection or wake")
     }
 
@@ -609,9 +608,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             webView.stopLoading()
             queueRecovery("Time Clock took too long to load")
         }
-        if let retry = nextRecoveryAt, now >= retry, !webView.isLoading {
-            nextRecoveryAt = nil
-            hasNavigationFailed = false
+        if let retry = pageRecovery.retryAt, now >= retry, !webView.isLoading {
+            pageRecovery.cancel()
             reload()
             return
         }
@@ -621,7 +619,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             handleOvertimeNotification(for: state)
         }
         // Refresh remote data only while the clock page is not being used.
-        if now.timeIntervalSince(lastPageLoad) >= 60, nextRecoveryAt == nil,
+        if now.timeIntervalSince(lastPageLoad) >= 60, pageRecovery.retryAt == nil,
            webView.window?.isVisible != true, state != .loginRequired, !webView.isLoading,
            observation.token == nil {
             refreshRemoteWhenIdle(at: now)
@@ -647,8 +645,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     func readTimeclockState() {
-        guard !isPreview, isPolling, !hasNavigationFailed, webView.url != nil,
-              !webView.isLoading, nextRecoveryAt == nil,
+        guard !isPreview, isPolling, webView.url != nil,
+              pageRecovery.allowsRead(isLoading: webView.isLoading),
               let token = observation.begin(at: Date()) else { return }
         lastReadAttempt = Date()
         webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript) { [weak self] result, error in
@@ -661,6 +659,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             let wasOvertime = self.overtimeMinutes > 0
             if nextState == .loginRequired {
                 self.state = .loginRequired
+                self.pageRecovery.verified()
                 self.endMonitoringActivity()
                 self.connectionStatus = "Sign in on Time Clock to restore status updates."
                 self.handleLoginNotification(for: nextState)
@@ -674,8 +673,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                         options: .userInitiatedAllowingIdleSystemSleep, reason: "Monitor the current Time Clock work session")
                 } else if !Self.isWorking(nextState) { self.endMonitoringActivity() }
                 self.connectionStatus = "Status observed from Time Clock · timer estimated between reads"
-                self.recoveryAttempt = 0
-                self.nextRecoveryAt = nil
+                self.pageRecovery.verified()
                 self.handleLoginNotification(for: nextState)
                 self.updateTodayProgressTitle()
             } else {
@@ -685,6 +683,9 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             if self.state == .loginRequired {
                 self.todayProgressTitle = ""
                 self.overtimeMinutes = 0
+            }
+            if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(self.state) {
+                self.monitoringLogger.info("Clock observation recovered: \(Self.reminderSchedulingState(self.state), privacy: .public)")
             }
             self.updateStatusIndicator()
             self.updateMenuBarTitle()
@@ -716,18 +717,19 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func queueRecovery(_ message: String) {
+        if isPolling, pageRecovery.retryAt == nil {
+            monitoringLogger.notice("Clock recovery scheduled: \(message, privacy: .public)")
+        }
         setUnavailable(message + " · Reconnecting")
-        guard isPolling, nextRecoveryAt == nil else { return }
-        let delays: [TimeInterval] = [2, 5, 15, 60]
-        nextRecoveryAt = Date().addingTimeInterval(delays[min(recoveryAttempt, delays.count - 1)])
-        recoveryAttempt += 1
+        guard isPolling else { return }
+        pageRecovery.schedule(at: Date())
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         observation.invalidate()
         navigationStartedAt = Date()
         lastPageLoad = Date()
-        hasNavigationFailed = false
+        pageRecovery.navigationStarted()
         if observation.lastState == nil { state = .loading }
         else { state = .stale }
         connectionStatus = "Refreshing Time Clock…" + (observation.lastState.map { " · Last known: \($0.headerTitle)" } ?? "")
@@ -739,7 +741,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         guard (error as NSError).code != NSURLErrorCancelled else { return }
         observation.invalidate()
         navigationStartedAt = nil
-        hasNavigationFailed = true
+        pageRecovery.navigationDidFail()
         queueRecovery("Time Clock could not load")
     }
 
@@ -749,8 +751,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         navigationStartedAt = nil
-        hasNavigationFailed = false
-        nextRecoveryAt = nil
+        pageRecovery.navigationStarted()
         observation.resetMotion()
         readTimeclockState()
     }

@@ -1,5 +1,7 @@
 # Architecture
 
+Clock-page reload backoff is owned by `TimeclockPageRecovery`. A queued reload must not block reads of a loaded document: the site's attendance controls render asynchronously after navigation finishes. A fresh verified observation cancels the fallback reload. Loading/failed navigations still block stale-document reads. `ClockMonitoring` logs recovery transitions without page content, account identifiers, or timer values.
+
 Time Clock Bar is a single-target macOS SwiftUI app with AppKit integration for menu-bar behavior.
 
 ## Main Flow

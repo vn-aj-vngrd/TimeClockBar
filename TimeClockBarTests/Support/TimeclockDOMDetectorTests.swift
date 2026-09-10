@@ -137,6 +137,53 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(value.state, "unknown")
         XCTAssertEqual(value.timer, "")
     }
+
+    func testFloatingClockPanelWithSplitSecondsMatchesVisibleWorkState() async throws {
+        // Public clock component structure: flex metrics, a separate seconds span, and stable action IDs.
+        let value = try await detect(html: """
+        <main>
+          <div style="position:absolute;width:340px">
+            <div><span>Time Clock</span></div>
+            <div style="display:flex;justify-content:space-around">
+              <div><span>Current</span><div style="display:flex"><div>02:55.</div><span>45</span></div></div>
+              <div><span>Day</span><div>08:05</div></div>
+              <div><span>Week</span><div>40:19</div></div>
+            </div>
+            <div>9:00 PM → Present</div><div>Took a break 8:00 PM → 9:00 PM</div>
+            <button id="take-break">Take Break</button><button id="clock-out">Clock Out</button>
+          </div>
+          <section>Vacation Leave 80h 0m</section>
+        </main>
+        """)
+        XCTAssertEqual(value.state, "active")
+        XCTAssertEqual(value.currentTimer, "02:55.45")
+        XCTAssertEqual(value.dayTimer, "08:05")
+        XCTAssertEqual(value.weekTimer, "40:19")
+    }
+
+    func testClockRenderedAfterNavigationRecoversBeforeScheduledReload() async throws {
+        let webView = WKWebView()
+        let delegate = NavigationWaiter()
+        webView.navigationDelegate = delegate
+        try await delegate.load(html: "<main id='clock'>Loading clock…</main>", in: webView)
+        let initial = try await webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript)
+        var value = try XCTUnwrap(TimeclockDOMDetection(initial as? [String: Any]))
+        XCTAssertEqual(value.state, "unknown")
+        var recovery = TimeclockPageRecovery()
+        recovery.schedule(at: Date())
+        // The website renders its controls asynchronously after the document finishes loading.
+        _ = try await webView.evaluateJavaScript("document.getElementById('clock').innerHTML = '<p>Current 02:55.45</p><button>Take Break</button><button>Clock Out</button>'")
+        if recovery.allowsRead(isLoading: webView.isLoading) {
+            let rendered = try await webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript)
+            value = try XCTUnwrap(TimeclockDOMDetection(rendered as? [String: Any]))
+        }
+        XCTAssertEqual(value.state, "active")
+        XCTAssertEqual(value.currentTimer, "02:55.45")
+        var observation = TimeclockObservation()
+        XCTAssertTrue(observation.accept(.active(value.currentTimer), timers: TimeclockDOMDetector.timers(from: value), at: Date()))
+        recovery.verified()
+        XCTAssertNil(recovery.retryAt)
+    }
 }
 
 @MainActor

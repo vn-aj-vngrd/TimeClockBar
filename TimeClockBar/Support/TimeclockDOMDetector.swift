@@ -59,7 +59,8 @@ enum TimeclockDOMDetector {
 
     static let detectionScript = #"""
     (() => {
-      const normalize = value => (value || '').replace(/\s+/g, ' ').trim();
+      const normalize = value => (value || '').replace(/\s+/g, ' ').trim()
+        .replace(/(\d{1,3}:\d{2}\.)\s+(\d{1,2})\b/g, '$1$2');
       const visible = el => {
         if (!el || el.closest('[hidden], [aria-hidden="true"]')) return false;
         const style = getComputedStyle(el);
