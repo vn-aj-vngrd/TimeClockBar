@@ -150,3 +150,15 @@ Logs: `/tmp/timeclock-v122-tests.log`, `/tmp/timeclock-v122-package.log`, `/tmp/
 - [x] Verify the installed final process reports `Clock observation recovered: active` at 00:14:35 and again at 00:15:01 after a background refresh, with continuing successful reads. Evidence: `/tmp/timeclock-v123-final-runtime.log`. The earlier false clocked-out hydration transition is absent in this final observed interval.
 
 Computer Use inspection remained unapproved; verification used user screenshots, public frontend source, local fixtures, and bounded runtime diagnostics. No production attendance/report actions were operated. These observations establish recovery from this loop, not full-shift or Focus/sleep-wake coverage. GitHub binary publication remains outside the approved release action.
+
+### Stable status during routine refresh — 2026-09-11
+
+- [x] Reproduce the display regression for clocked-out, active, and break states. Preserve last-confirmed presentation during healthy refreshes while keeping reminder state unverified.
+- [x] Add a separate Refreshing label and retain the original last-observed timestamp. A thirty-second age limit, login expiry, offline/sleep, or actual read/navigation failure immediately ends cached presentation; known unavailable state is labeled Unavailable.
+- [x] Verify that missing/old observations, a backwards clock change, ended grace, and login-required status cannot display cached attendance. Existing reminder tests continue to use authoritative state.
+- [x] Full local suite: **135 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_01-21-39-+0800.xcresult`.
+- [x] Commit and push `d41e3d9`; build, signature-verify, install, and open **1.2.4, build 36** using explicit `VERSION=1.2.4` because the intervening local versions remain untagged.
+- [x] Package SHA-256: `4a3dd96e3e1fb844b4f8e2c3ac0f86c63a6f2d0a17a5a25a7f78d72150638756`. Install log: `/tmp/timeclock-v124-install.log`.
+- [x] Installed runtime recorded `Refresh keeps last confirmed display: clockedOut` at 01:24:12 and verified `clockedOut` again at 01:24:26. No unavailable transition occurred during that observed refresh. Evidence: `/tmp/timeclock-v124-runtime.log`.
+
+Native visual inspection remains unapproved; these checks use the shared display policy and installed runtime diagnostics. No production attendance/report controls or test notifications were operated.
