@@ -123,3 +123,16 @@ Final local build verification:
 - [x] Release rebuilt at the same local **1.2.1, build 30** path above; signature and whitespace checks passed. Build log: `/tmp/timeclock-state-eligibility-release.log`.
 
 The installed app remains unchanged. Completion-aware cancellation requires a fresh observation while the app runs; the existing physical notification/Focus/sleep-wake gates remain pending. No real notifications or production website actions were used by these tests.
+
+### Version 1.2.2 local release and installation — 2026-09-10
+
+- [x] Commit and push the reliability changes: `04af3cef94e7969e38576a86000027b1e2a65144` on `main`.
+- [x] Resolve the new version through conventional commits: **1.2.2, build 31**.
+- [x] Pass version-script checks and the committed release's full local XCTest suite: **124 passed, zero failures/skips**. Result: `~/Library/Developer/Xcode/DerivedData/TimeClockBar-dddcpniyqsyqsfdzpmslfbqiedme/Logs/Test/Test-TimeClockBar-2026.09.10_23-36-25-+0800.xcresult`.
+- [x] Hosted CI build/test step passed for the release commit: [run 34496852246](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34496852246).
+- [x] Build and signature-verify `dist/TimeClockBar-1.2.2-internal.zip`. SHA-256: `84e3ffbcaf019d6f05f118a54b6dcddd252aef566c3ab702315ad0a9c3dcec35`. Verify version/build metadata and all ten sound resources in the archive.
+- [x] Quit the old app before replacement; install and open `~/Applications/Time Clock Bar.app` normally with Today visible requested. Confirm running executable path, installed version/build, valid signature, and executable equality with the packaged Release build.
+- [x] Replace the installed 1.2.1 bundle, retaining the installer-created backup zip; move the two obsolete reliability/test app bundles to Trash. Settings and website data are preserved.
+- [ ] GitHub Release binary publication was not performed: automatic approval review rejected dispatching the release workflow because binary publication was considered separate authorization from committing, pushing, and installing locally. The local 1.2.2 package and installation are complete.
+
+Logs: `/tmp/timeclock-v122-tests.log`, `/tmp/timeclock-v122-package.log`, `/tmp/timeclock-v122-install.log`. Native visual/Focus/sleep-wake and listener-confirmed sound gates remain unobserved; no production attendance/report controls were operated.
