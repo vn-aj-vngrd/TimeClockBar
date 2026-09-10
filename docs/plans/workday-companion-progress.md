@@ -193,5 +193,8 @@ No production attendance/report actions or real notification tests were performe
 - [x] Preserve the successful-read timestamp during routine refreshes, failure, and login expiry. Show short Refreshing, Update delayed, and Sign in required states without inventing a timestamp before the first successful observation.
 - [x] Expose the full date/time with seconds, timezone, elapsed age, and connection details through native help and VoiceOver. Keep preview wording, work/break timer updates, polling cadence, and authoritative observation ownership unchanged.
 - [x] Four formatting/state tests plus existing observation regressions passed. Full suite: **147 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_02-10-32-+0800.xcresult`; log: `/tmp/timeclock-observation-label-full-tests.log`. Whitespace check passed.
+- [x] Commit and push `fd5c4ae`; build, signature-verify, replace the old app, and open **1.2.7, build 42** at `~/Applications/Time Clock Bar.app`. Installed metadata and running executable with `--show-today` verified; settings and website data preserved.
+- [x] Package SHA-256: `977f75ad333d373a4a0b46907c23d80ae629d405accf669024c107112bda8a2c`. Install log: `/tmp/timeclock-v127-install.log`.
+- [x] Hosted build and tests passed for the release commit: [run 34512839448](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34512839448).
 
 Native tooltip/VoiceOver presentation has not been visually or interactively verified; native app inspection remains unapproved. No production attendance/report actions or real notification tests were performed.
