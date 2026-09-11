@@ -206,5 +206,8 @@ Native tooltip/VoiceOver presentation has not been visually or interactively ver
 - [x] Verify a missing break counter retains Break status without displaying work time or attendance-history times.
 - [x] Reproduce and repair an existing persisted zero-counter break deadline after restart. Ignore rounding noise, do not extend deadlines for a stalled counter, preserve silence, and permit exactly one overdue catch-up when previously future requests need correction.
 - [x] Full XCTest suite: **151 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_20-22-47-+0800.xcresult`; log: `/tmp/timeclock-break-full-tests.log`. Whitespace check passed.
+- [x] Commit and push `75fe343`; build, signature-verify, replace the old app, and open **1.2.8, build 44** at `~/Applications/Time Clock Bar.app`. Installed metadata and running executable verified; settings and website data preserved.
+- [x] Package SHA-256: `d71008b887a3caf1b450dc546756c15204ad7aa40418671a75c214de7bf687c4`. Install log: `/tmp/timeclock-v128-install.log`. Installed monitoring resumed; categorical runtime evidence is in `/tmp/timeclock-v128-runtime.log`, which does not establish a visual break-counter comparison.
+- [x] Hosted build and tests passed: [run 34598829926](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34598829926).
 
 Behavior was verified with the supplied screenshot, cached public clock-component source, local WebKit fixtures, and an in-memory notification center. No production attendance/report controls were operated and no real notification tests were sent. Native visual inspection and physical notification gates remain unverified.
