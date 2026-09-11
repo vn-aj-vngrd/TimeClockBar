@@ -19,6 +19,19 @@ struct TimeclockDOMDetection {
 }
 
 enum TimeclockDOMDetector {
+    static func state(from detection: TimeclockDOMDetection?) -> TimeclockState {
+        guard let detection else { return .unknown(nil) }
+        let workTimer = detection.currentTimer.isEmpty ? detection.timer : detection.currentTimer
+        switch detection.state {
+        case "loginRequired": return .loginRequired
+        case "clockedOut": return .clockedOut
+        case "active": return .active(workTimer)
+        // Current is the work counter and often resets to zero during a break.
+        case "onBreak": return .onBreak(detection.timer)
+        default: return .unknown(workTimer.isEmpty ? nil : workTimer)
+        }
+    }
+
     static func timers(from detection: TimeclockDOMDetection?) -> TimeclockTimers {
         guard let detection else { return .empty }
 
@@ -90,6 +103,8 @@ enum TimeclockDOMDetector {
       const text = normalize(root?.innerText);
       const metric = name => text.match(new RegExp('\\b' + name + '\\s+(\\d{1,3}:\\d{2}(?:(?::|\\.)\\d{1,2})?)', 'i'))?.[1] || '';
       const currentTimer = metric('Current'), dayTimer = metric('Day'), weekTimer = metric('Week');
+      const hasBreakNotice = /\byou are on a break\b/i.test(text);
+      const breakTimer = text.match(/\byou are on a break\s+(\d{1,3}:\d{2}(?:(?::|\.)\d{1,2})?)\b/i)?.[1] || '';
       let timer = '';
       const candidates = root?.querySelectorAll('[data-testid*="timer"], [data-testid*="elapsed"], [class*="timer"], [class*="duration"], [class*="elapsed"], [id*="timer"]') || [];
       for (const el of candidates) {
@@ -109,7 +124,7 @@ enum TimeclockDOMDetector {
       else if (clockIn) state = 'clockedOut';
       else if (login) state = 'loginRequired';
       else if (!pendingAttendance && timer && sidebar && /time clock/i.test(sidebar.innerText)) state = 'active';
-      return {state, timer: state === 'onBreak' ? (timer || currentTimer) : (currentTimer || timer),
+      return {state, timer: state === 'onBreak' ? (hasBreakNotice ? breakTimer : timer) : (currentTimer || timer),
               currentTimer, dayTimer, weekTimer};
     })();
     """#

@@ -52,9 +52,23 @@ final class WorkdayReminderController: ObservableObject {
                     record.breakStartedAt = nil
                 }
                 record.breakReturned = false
-                if record.breakStartedAt == nil,
-                   let elapsed = TimeclockTimeMath.timerSeconds(from: timer), elapsed <= 24 * 3600 {
-                    record.breakStartedAt = now.addingTimeInterval(-Double(elapsed))
+                if let elapsed = TimeclockTimeMath.timerSeconds(from: timer), elapsed <= 24 * 3600 {
+                    let startedAt = now.addingTimeInterval(-Double(elapsed))
+                    let tolerance: TimeInterval = timer.contains(".") || timer.split(separator: ":").count == 3 ? 2 : 60
+                    // Repair a deadline seeded from the zero work counter. Never extend a
+                    // break because a stalled/rounded counter suggests a later start.
+                    if record.breakStartedAt == nil || record.breakStartedAt!.timeIntervalSince(startedAt) > tolerance {
+                        if let previous = makeCheckpoints(shift: shift, record: record, schedule: schedule,
+                                                           workLead: 15, endLead: 15).first(where: { $0.kind == .breakOver }) {
+                            // These stages were still in the future; allow rescheduling/catch-up
+                            // at the corrected deadline without replaying already-due stages.
+                            for offset in previous.offsets where previous.due.addingTimeInterval(Double(offset * 60)) > now {
+                                let stage = offset < 0 ? "advance" : "due-\(offset)"
+                                record.scheduledEvents.remove("\(previous.id)|\(stage)")
+                            }
+                        }
+                        record.breakStartedAt = startedAt
+                    }
                 }
             case .clockedOut:
                 if record.seenWorking, !record.clockedOut {

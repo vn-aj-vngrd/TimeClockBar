@@ -198,3 +198,13 @@ No production attendance/report actions or real notification tests were performe
 - [x] Hosted build and tests passed for the release commit: [run 34512839448](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34512839448).
 
 Native tooltip/VoiceOver presentation has not been visually or interactively verified; native app inspection remains unapproved. No production attendance/report actions or real notification tests were performed.
+
+### Break counter mismatch — 2026-09-11
+
+- [x] Reproduce the reported floating panel in local WebKit: break `00:05.59`, Current `00:00.00`. The detector incorrectly selected the work counter because the break counter has no timer-specific selector.
+- [x] Extract the counter immediately after the visible break label, normalize split seconds, and remove Current fallback from break-state parsing/menu rendering. Verify the real detector → observation → menu path displays `00:06:08` nine seconds later, with unchanged work totals.
+- [x] Verify a missing break counter retains Break status without displaying work time or attendance-history times.
+- [x] Reproduce and repair an existing persisted zero-counter break deadline after restart. Ignore rounding noise, do not extend deadlines for a stalled counter, preserve silence, and permit exactly one overdue catch-up when previously future requests need correction.
+- [x] Full XCTest suite: **151 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_20-22-47-+0800.xcresult`; log: `/tmp/timeclock-break-full-tests.log`. Whitespace check passed.
+
+Behavior was verified with the supplied screenshot, cached public clock-component source, local WebKit fixtures, and an in-memory notification center. No production attendance/report controls were operated and no real notification tests were sent. Native visual inspection and physical notification gates remain unverified.

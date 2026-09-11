@@ -24,6 +24,42 @@ final class TimeclockReminderEligibilityTests: XCTestCase {
                                  onScheduled: { engine.markScheduled($0) }).value
     }
 
+    func testCorrectBreakTimerRepairsPreviouslySavedZeroCounterDeadline() {
+        let defaults = preferences()
+        let now = date("2026-09-11T12:15:00Z")
+        let old = WorkdayReminderController(defaults: defaults)
+        _ = runtime(old, state: .onBreak("00:00.00"), at: now)
+        let engine = WorkdayReminderController(defaults: defaults)
+        let result = runtime(engine, state: .onBreak("00:06.09"), at: now.addingTimeInterval(10))
+        let due = date("2026-09-11T13:09:01Z")
+        XCTAssertEqual(engine.checkpoints.first { $0.kind == .breakOver }?.due, due)
+        XCTAssertEqual(result.plans.first { $0.identifier.hasSuffix("breakOver-0|due-0") }?.fireDate, due)
+        // A later minute-only read must not replace a precise start with rounding noise.
+        _ = runtime(engine, state: .onBreak("00:06"), at: now.addingTimeInterval(20))
+        XCTAssertEqual(engine.checkpoints.first { $0.kind == .breakOver }?.due, due)
+        _ = runtime(engine, state: .onBreak("00:06.09"), at: now.addingTimeInterval(24))
+        XCTAssertEqual(engine.checkpoints.first { $0.kind == .breakOver }?.due, due) // A frozen value cannot extend it.
+        let restarted = WorkdayReminderController(defaults: defaults)
+        _ = runtime(restarted, state: .stale, at: now.addingTimeInterval(25))
+        XCTAssertEqual(restarted.checkpoints.first { $0.kind == .breakOver }?.due, due)
+    }
+
+    func testCorrectedOverdueBreakReplacesFutureQueueAndCatchesUpOnce() async {
+        let engine = WorkdayReminderController(defaults: preferences())
+        let center = MemoryNotificationCenter()
+        let now = date("2026-09-11T12:15:00Z")
+        let delivery = TimeclockReminderDelivery(center: center, now: { now })
+        await reconcile(runtime(engine, state: .onBreak("00:00.00"), at: now), engine: engine, delivery: delivery)
+        let corrected = runtime(engine, state: .onBreak("01:06:00"), at: now)
+        let catchUp = corrected.plans.filter { $0.fireDate == now.addingTimeInterval(1) }
+        XCTAssertEqual(catchUp.count, 1)
+        XCTAssertTrue(catchUp.first?.ownerIdentifier?.contains("|breakOver-0") == true)
+        await reconcile(corrected, engine: engine, delivery: delivery)
+        XCTAssertEqual(center.pending.values.filter { TimeclockReminderDelivery.owner($0)?.contains("|breakOver-0") == true }.count, 1)
+        XCTAssertFalse(runtime(engine, state: .onBreak("01:06:01"), at: now.addingTimeInterval(1)).plans
+            .contains { $0.fireDate == now.addingTimeInterval(2) })
+    }
+
     func testEarlyClockInCancelsTodaysClockInAlertsAndSnoozeButKeepsTomorrow() async throws {
         let defaults = preferences()
         let engine = WorkdayReminderController(defaults: defaults)

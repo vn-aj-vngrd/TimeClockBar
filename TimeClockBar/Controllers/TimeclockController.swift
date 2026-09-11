@@ -661,7 +661,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             guard error == nil else { self.queueRecovery("Could not read Time Clock"); return }
             let detection = TimeclockDOMDetection(result as? [String: Any])
             let nextTimers = TimeclockDOMDetector.timers(from: detection)
-            let nextState = self.parseState(from: detection)
+            let nextState = TimeclockDOMDetector.state(from: detection)
             let previousState = self.state
             let wasOvertime = self.overtimeMinutes > 0
             if nextState == .loginRequired {
@@ -802,32 +802,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             self?.reminderSoundPreviewPlayer = nil
             self?.previewingReminderKind = nil
         }
-    }
-
-    private func parseState(from detection: TimeclockDOMDetection?) -> TimeclockState {
-        guard let detection else {
-            return .unknown(nil)
-        }
-
-        let timer = firstNonEmpty(detection.currentTimer, detection.timer)
-        let breakTimer = firstNonEmpty(detection.timer, detection.currentTimer)
-
-        switch detection.state {
-        case "loginRequired":
-            return .loginRequired
-        case "clockedOut":
-            return .clockedOut
-        case "active":
-            return .active(timer)
-        case "onBreak":
-            return .onBreak(breakTimer)
-        default:
-            return .unknown(timer.isEmpty ? nil : timer)
-        }
-    }
-
-    private func firstNonEmpty(_ values: String...) -> String {
-        values.first { !$0.isEmpty } ?? ""
     }
 
     private func updateMenuBarTitle() {

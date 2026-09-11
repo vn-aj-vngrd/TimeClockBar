@@ -12,6 +12,7 @@ Time Clock Bar is a single-target macOS SwiftUI app with AppKit integration for 
 - `App/AppDelegate.swift` owns app lifecycle, `NSStatusItem`, popover setup, global hotkey registration, network and sleep monitoring, and right-click menu actions.
 - `Controllers/TimeclockController.swift` owns published app state, WebKit navigation, polling coordination, launch-at-login state, and persisted preferences.
 - `Support/TimeclockDOMDetector.swift` owns the JavaScript extraction contract and DOM detection payload.
+- Break observations use the counter immediately following “You are on a break,” including seconds in a separate span. The Current work metric is never a break-time fallback. The detector also maps its payload to authoritative clock state; unavailable break elapsed time renders Break without a fabricated work timer.
 - `Support/TimeclockReminderScheduler.swift` owns notification categories, reminder scheduling, snooze/test notifications, and legacy reminder cleanup.
 - `Support/TimeclockReminderDelivery.swift` owns serialized notification-center operations, schedule revision checks, and source-owned snooze reconciliation; its notification-center protocol provides the deterministic test boundary.
 - `Support/HotkeyFormatting.swift` owns keyboard shortcut labels.

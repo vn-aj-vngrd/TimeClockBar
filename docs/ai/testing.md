@@ -1,5 +1,7 @@
 # Testing
 
+Break-source regressions mirror the public floating clock panel and reported screenshot: an unannotated `00:05.59` break counter precedes Current `00:00.00`. The real detector, observation estimator, and menu formatter must show `00:06:08` nine seconds later without adding to work totals. Missing labeled elapsed time must never use Current or history. Reminder tests verify repairing a previously saved zero-counter deadline after restart, retaining precise timing through rounded/stalled reads, and replacing future requests with a single catch-up when the corrected break is overdue.
+
 `TimeclockObservationLabelTests` covers a fixed visible timestamp with changing hover age, work-timezone formatting, retained timestamps during refresh/failure/login, expired refresh grace, backwards clock changes, a date after midnight, successful-read advancement, and missing observations. Existing observation tests verify that unverified reads and estimated timer ticks never advance the successful-read timestamp.
 
 `WorkdayCompanionTests` exercises a 15:00 shift completed at 00:01 the next day: Today advances to the next afternoon with a fresh checklist and a separate completed report/clock-out summary. It also covers midnight while working/on break/unverified, restart beyond the recovery window, early next-shift clock-in and reminder eligibility, Friday-to-Saturday completion, and legacy records without a confirmation timestamp. These tests use local observations and isolated defaults only.

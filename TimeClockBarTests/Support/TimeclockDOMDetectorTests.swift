@@ -87,6 +87,55 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(detection.currentTimer, "00:00")
     }
 
+    func testFloatingBreakPanelUsesBreakElapsedInsteadOfZeroWorkTimer() async throws {
+        // Mirrors the public component and reported screenshot: an unannotated break
+        // counter with seconds in a span, followed by the separate Current work metric.
+        let detection = try await detect(html: """
+        <main><div>
+          <span>Time Clock</span>
+          <div><div><span>You are on a break</span></div>
+            <div><div>00:05.<span>59</span></div></div>
+          </div>
+          <div style="display:flex">
+            <div><span>Current</span><div>00:00.<span>00</span></div></div>
+            <div><span>Day</span><div>05:30</div></div>
+            <div><span>Week</span><div>46:42</div></div>
+          </div>
+          <div>Taking a break 8:09 PM → Present</div>
+          <button id="end-break">End Break</button><button id="clock-out">Clock Out</button>
+        </div></main>
+        """)
+        XCTAssertEqual(detection.state, "onBreak")
+        XCTAssertEqual(detection.timer, "00:05.59")
+        XCTAssertEqual(detection.currentTimer, "00:00.00")
+        let state = TimeclockDOMDetector.state(from: detection)
+        var observation = TimeclockObservation()
+        let now = Date(timeIntervalSince1970: 1000)
+        XCTAssertTrue(observation.accept(state, timers: TimeclockDOMDetector.timers(from: detection), at: now))
+        let displayed = observation.displayTimers(at: now.addingTimeInterval(9))
+        XCTAssertEqual(TimeclockMenuTitleFormatter.title(state: .onBreak(displayed.fallback), timers: displayed,
+            components: [.status, .current], remainingTitle: "", showsLabels: false), "Break · 00:06:08")
+        XCTAssertEqual(displayed.day, "05:30")
+        XCTAssertEqual(displayed.week, "46:42")
+    }
+
+    func testMissingLabeledBreakTimerNeverUsesWorkCounterOrHistory() async throws {
+        let detection = try await detect(html: """
+        <main><span>You are on a break</span><div>--:--</div>
+          <div class="timer">Current 00:00.00</div><p>Day 05:30</p>
+          <p>Taking a break 8:09 PM → Present</p><button>End Break</button>
+        </main>
+        """)
+        XCTAssertEqual(detection.timer, "")
+        let state = TimeclockDOMDetector.state(from: detection)
+        XCTAssertEqual(state, .onBreak(""))
+        for component: TimeclockDisplayComponent in [.current, .day, .week] {
+            XCTAssertEqual(TimeclockMenuTitleFormatter.title(state: state,
+                timers: TimeclockDOMDetector.timers(from: detection), components: [.status, component],
+                remainingTitle: "", showsLabels: false), "Break")
+        }
+    }
+
     func testDetectsMetricTimers() async throws {
         let detection = try await detect(html: "<main><p>Current 1:02</p><p>Day 7:30</p><p>Week 32:15</p><button>Clock Out</button></main>")
 

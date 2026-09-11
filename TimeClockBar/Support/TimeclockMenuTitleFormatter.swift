@@ -42,7 +42,7 @@ enum TimeclockMenuTitleFormatter {
     }
 
     private static func breakTime(for state: TimeclockState) -> String? {
-        guard case .onBreak(let time) = state, !time.isEmpty else { return nil }
+        guard case .onBreak(let time) = state else { return nil }
         return time
     }
 
