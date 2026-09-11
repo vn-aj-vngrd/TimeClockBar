@@ -28,6 +28,59 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(invalid.weekTimer, "")
     }
 
+    func testHiddenReadOpensOnlyClockDetailsAndDoesNotToggleAnOpenPanel() async throws {
+        let webView = WKWebView()
+        let delegate = NavigationWaiter()
+        webView.navigationDelegate = delegate
+        try await delegate.load(html: """
+        <aside><button onclick="window.opens++;document.getElementById('details').hidden=false"><span>Time Clock</span><span>00:32</span></button></aside>
+        <main id="details" hidden><span>Time Clock</span><span>Current</span><span>Day</span><span>Week</span>
+          <div>You are on a break 00:32.23</div>
+          <div class="group relative flex cursor-default"><div class="truncate">Taking a break</div>
+            <span class="flex-1 truncate"><span class="truncate">8:09 PM</span><svg></svg><span class="truncate">Present</span></span>
+          </div><button onclick="window.actions++">End Break</button>
+        </main><button onclick="window.actions++">Clock In</button><button onclick="window.actions++">Clock Out</button>
+        <script>window.opens=0;window.actions=0;</script>
+        """, in: webView)
+        let visibleRead = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: false))
+        XCTAssertEqual(TimeclockDOMDetection(visibleRead as? [String: Any])?.history.count, 0)
+        for _ in 0..<2 {
+            let result = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: true))
+            let detection = try XCTUnwrap(TimeclockDOMDetection(result as? [String: Any]))
+            XCTAssertEqual(detection.state, "onBreak")
+            XCTAssertEqual(detection.history.first?.start, "8:09 PM")
+            _ = try await webView.evaluateJavaScript("delete window.__timeclockPanelRequestedAt")
+        }
+        let opens = try await webView.evaluateJavaScript("window.opens")
+        let actions = try await webView.evaluateJavaScript("window.actions")
+        XCTAssertEqual(opens as? Int, 1)
+        XCTAssertEqual(actions as? Int, 0)
+    }
+
+    func testClockPanelOpeningProtectsInputAndDebouncesAsynchronousRendering() async throws {
+        let webView = WKWebView()
+        let delegate = NavigationWaiter()
+        webView.navigationDelegate = delegate
+        try await delegate.load(html: """
+        <input id="draft"><button onclick="window.opens++"><span>Time Clock</span></button>
+        <script>window.opens=0;</script>
+        """, in: webView)
+        _ = try await webView.evaluateJavaScript("document.getElementById('draft').focus()")
+        _ = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: true))
+        var opens = try await webView.evaluateJavaScript("window.opens")
+        XCTAssertEqual(opens as? Int, 0)
+        _ = try await webView.evaluateJavaScript("document.activeElement.blur();window.__timeclockLastInput=Date.now()")
+        _ = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: true))
+        opens = try await webView.evaluateJavaScript("window.opens")
+        XCTAssertEqual(opens as? Int, 0)
+        _ = try await webView.evaluateJavaScript("delete window.__timeclockLastInput")
+        for _ in 0..<2 {
+            _ = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: true))
+        }
+        opens = try await webView.evaluateJavaScript("window.opens")
+        XCTAssertEqual(opens as? Int, 1)
+    }
+
     func testDictionaryParsingPreservesStrings() throws {
         let detection = try XCTUnwrap(TimeclockDOMDetection([
             "state": "active",

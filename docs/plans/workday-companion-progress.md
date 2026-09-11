@@ -220,4 +220,7 @@ Behavior was verified with the supplied screenshot, cached public clock-componen
 - [x] Use recorded break starts to correct return deadlines while retaining a precise elapsed-counter anchor within one displayed minute. Restore completed break history on startup after returning to work and suppress reminders for those completed actions.
 - [x] Full XCTest suite: **159 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_20-58-28-+0800.xcresult`; log: `/tmp/timeclock-history-final-tests.log`. Cases include restart, overnight clock-out, timezones/year boundaries, multiple breaks, missing history, and duplicate container/dual-timezone extraction.
 
+- [x] Installed monitoring exposed a missing-history path after background reload: the website unmounts closed clock details. Add guarded hidden-page opening of its read-only navigation launcher; preserve input and visible-page user control. Two new WebKit regressions failed before the fix and passed afterwards.
+- [x] Final full XCTest suite: **161 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_21-10-08-+0800.xcresult`; log: `/tmp/timeclock-panel-full.log`.
+
 No production attendance/report controls were operated. The new runtime diagnostic records only the number of available attendance dates, never their values or client names. Native visual inspection remains unverified.

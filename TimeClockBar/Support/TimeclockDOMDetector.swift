@@ -27,6 +27,31 @@ struct TimeclockDOMDetection {
 }
 
 enum TimeclockDOMDetector {
+    static func readScript(revealClockPanel: Bool) -> String {
+        (revealClockPanel ? openClockPanelScript + ";\n" : "") + detectionScript
+    }
+
+    // The website unmounts history when details close. Reveal that read-only panel
+    // after a background reload; never activate an attendance or report action.
+    private static let openClockPanelScript = #"""
+    (() => {
+      if (window.__timeclockLastInput || document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
+      const visible = el => el && !el.closest('[hidden], [aria-hidden="true"]') &&
+        getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length > 0;
+      const text = el => (el.innerText || '').replace(/\s+/g, ' ').trim();
+      const spans = [...document.querySelectorAll('span')].filter(visible);
+      // These metrics belong to the open details panel, including while its data loads.
+      if (['Current', 'Day', 'Week'].every(label => spans.some(el => text(el) === label))) return;
+      if (Date.now() - (window.__timeclockPanelRequestedAt || 0) < 15000) return;
+      const launchers = [...document.querySelectorAll('button')].filter(el => visible(el) &&
+        !el.disabled && el.getAttribute('aria-disabled') !== 'true' &&
+        [...el.querySelectorAll('span')].some(span => visible(span) && text(span) === 'Time Clock'));
+      if (launchers.length !== 1) return;
+      window.__timeclockPanelRequestedAt = Date.now();
+      launchers[0].click();
+    })()
+    """#
+
     static func state(from detection: TimeclockDOMDetection?) -> TimeclockState {
         guard let detection else { return .unknown(nil) }
         let workTimer = detection.currentTimer.isEmpty ? detection.timer : detection.currentTimer

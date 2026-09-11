@@ -656,7 +656,8 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
               pageRecovery.allowsRead(isLoading: webView.isLoading),
               let token = observation.begin(at: Date()) else { return }
         lastReadAttempt = Date()
-        webView.evaluateJavaScript(TimeclockDOMDetector.detectionScript) { [weak self] result, error in
+        let script = TimeclockDOMDetector.readScript(revealClockPanel: webView.window?.isVisible != true)
+        webView.evaluateJavaScript(script) { [weak self] result, error in
             guard let self, self.isPolling, self.observation.finish(token) else { return }
             guard error == nil else { self.queueRecovery("Could not read Time Clock"); return }
             let detection = TimeclockDOMDetection(result as? [String: Any])
