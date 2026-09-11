@@ -81,6 +81,41 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(opens as? Int, 1)
     }
 
+    func testHiddenReadUsesMobileClockChipWhenSidebarNavigationIsAbsent() async throws {
+        let webView = WKWebView()
+        let delegate = NavigationWaiter()
+        webView.navigationDelegate = delegate
+        try await delegate.load(html: """
+        <main><div class="bg-primary"><button onclick="window.opens++">
+          <div class="rounded-lg border pl-2"><div class="h-2 w-2 rounded-lg"></div>
+            <div class="font-semibold">05:30</div>
+          </div></button><button onclick="window.actions++">Clock Out</button></div>
+        <button onclick="window.actions++">05:30</button></main>
+        <script>window.opens=0;window.actions=0;</script>
+        """, in: webView)
+        _ = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: true))
+        let opens = try await webView.evaluateJavaScript("window.opens")
+        let actions = try await webView.evaluateJavaScript("window.actions")
+        XCTAssertEqual(opens as? Int, 1)
+        XCTAssertEqual(actions as? Int, 0)
+    }
+
+    func testFloatingClockHistoryOutsideMainUsesItsOwnPanel() async throws {
+        let detection = try await detect(html: """
+        <main><h1>Overview</h1><p>Current 99:00</p></main>
+        <div class="group pointer-events-auto relative flex flex-col">
+          <span>Time Clock</span><p>You are on a break 00:32.23</p><p>Current 00:00.00</p>
+          <div class="group relative flex cursor-default"><div class="truncate">Taking a break</div>
+            <span class="flex-1 truncate"><span class="truncate">8:09 PM</span><svg></svg><span class="truncate">Present</span></span>
+          </div><button>End Break</button>
+        </div>
+        """)
+        XCTAssertEqual(detection.state, "onBreak")
+        XCTAssertEqual(detection.timer, "00:32.23")
+        XCTAssertEqual(detection.currentTimer, "00:00.00")
+        XCTAssertEqual(detection.history.first?.start, "8:09 PM")
+    }
+
     func testDictionaryParsingPreservesStrings() throws {
         let detection = try XCTUnwrap(TimeclockDOMDetection([
             "state": "active",

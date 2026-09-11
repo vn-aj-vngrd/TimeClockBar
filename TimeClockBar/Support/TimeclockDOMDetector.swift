@@ -43,9 +43,15 @@ enum TimeclockDOMDetector {
       // These metrics belong to the open details panel, including while its data loads.
       if (['Current', 'Day', 'Week'].every(label => spans.some(el => text(el) === label))) return;
       if (Date.now() - (window.__timeclockPanelRequestedAt || 0) < 15000) return;
-      const launchers = [...document.querySelectorAll('button')].filter(el => visible(el) &&
-        !el.disabled && el.getAttribute('aria-disabled') !== 'true' &&
-        [...el.querySelectorAll('span')].some(span => visible(span) && text(span) === 'Time Clock'));
+      const buttons = [...document.querySelectorAll('button')].filter(el => visible(el) &&
+        !el.disabled && el.getAttribute('aria-disabled') !== 'true');
+      const named = buttons.filter(el => [...el.querySelectorAll('span')]
+        .some(span => visible(span) && text(span) === 'Time Clock'));
+      // The compact header uses an unlabeled timer chip instead of the sidebar label.
+      // Require its clock status dot, chip structure, header, and timer-only content.
+      const launchers = named.length ? named : buttons.filter(el => el.closest('.bg-primary') &&
+        el.querySelector('div.border.pl-2 div.h-2.w-2.rounded-lg') &&
+        /^\d{1,3}:\d{2}(?:(?::|\.)\d{2})?$/.test(text(el)));
       if (launchers.length !== 1) return;
       window.__timeclockPanelRequestedAt = Date.now();
       launchers[0].click();
@@ -131,7 +137,7 @@ enum TimeclockDOMDetector {
       const password = [...document.querySelectorAll('input[type="password"]')].some(visible);
       const authRoute = /\/(login|sign-in|signin)(\/|$)/i.test(location.pathname);
       // Keep extraction within the clock panel where possible. No body-wide wildcard traversal.
-      const root = attendance?.closest('[data-testid="time-clock"], [data-testid="timeclock"], aside, main, form')
+      const root = attendance?.closest('[data-testid="time-clock"], [data-testid="timeclock"], div.group.pointer-events-auto, aside, main, form')
         || document.querySelector('aside') || document.querySelector('main') || document.body;
       const text = normalize(root?.innerText);
       const metric = name => text.match(new RegExp('\\b' + name + '\\s+(\\d{1,3}:\\d{2}(?:(?::|\\.)\\d{1,2})?)', 'i'))?.[1] || '';

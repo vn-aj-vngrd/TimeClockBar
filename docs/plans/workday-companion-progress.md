@@ -222,5 +222,7 @@ Behavior was verified with the supplied screenshot, cached public clock-componen
 
 - [x] Installed monitoring exposed a missing-history path after background reload: the website unmounts closed clock details. Add guarded hidden-page opening of its read-only navigation launcher; preserve input and visible-page user control. Two new WebKit regressions failed before the fix and passed afterwards.
 - [x] Final full XCTest suite: **161 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_21-10-08-+0800.xcresult`; log: `/tmp/timeclock-panel-full.log`.
+- [x] Follow-up public component inspection found that floating clock details are outside the page's main element and compact layouts use an unlabeled header timer launcher. Reproduce each path with a failing fixture, select the actual clock-panel ancestor, and support the narrowly identified header timer chip.
+- [x] Full suite after both layout fixes: **163 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_21-16-07-+0800.xcresult`; log: `/tmp/timeclock-recorded-final-tests.log`.
 
 No production attendance/report controls were operated. The new runtime diagnostic records only the number of available attendance dates, never their values or client names. Native visual inspection remains unverified.
