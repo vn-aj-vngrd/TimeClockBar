@@ -12,6 +12,8 @@
 
 **Checkpoint:** a scheduled attendance action: clock in, start break, return from break, or clock out. A reminder's opening, dismissal, or snooze does not complete its checkpoint.
 
+**Recorded action time:** the time shown in Time Clock's history for clock-in, break, return, or clock-out. It is stored separately from the checkpoint's planned due date and from the app's observation timestamp. Undated time ranges are resolved in chronological order within the observed shift; unreadable, inconsistent, or out-of-shift history cannot supply an actual date.
+
 **Break session:** an observed break with its own elapsed timer and return deadline, distinct from the preferred break time.
 
 **Wrap-up:** file the Full Scale report, then clock out in Time Clock. This is navigation guidance; the websites retain control of submission and attendance.

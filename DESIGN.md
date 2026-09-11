@@ -19,6 +19,8 @@ After confirmed clock-out, make the next scheduled shift the main content immedi
 
 Keep the observation footer quiet: “Observed 1:48 PM,” using the work timezone and system time format. Add the date for an older calendar day. Show “Refreshing,” “Update delayed,” or “Sign in required” alongside the unchanged observation timestamp as appropriate. Hover and VoiceOver expose the exact date/time with seconds, timezone, elapsed age, and connection details. The timestamp means the loaded page was successfully read; it does not confirm a fresh server update. Work/break timers keep ticking, while the visible observation label has no ticking elapsed seconds.
 
+Checklist dates distinguish evidence from plans. Completed clock-in, break, break return, and clock-out use “Recorded” times from the Time Clock history. Upcoming items use “Scheduled”; the return deadline derived from the actual break start uses “Due.” A completed action without readable history says “Time unavailable” rather than displaying its scheduled time as actual. Preserve the planned schedule for reminder policy and show it in help for a completed row. The previous-shift summary prefers recorded clock-out time, retaining observation time only as a clearly labeled fallback.
+
 ## Native conventions
 
 Reuse `ChromeColor`, the system font, semantic colors, native buttons and segmented controls. Use monospaced digits for countdowns. Pair colors with text/icons, retain keyboard focus and accessibility labels, and respect Reduce Motion. Avoid per-row action menus and repeated controls that turn the dashboard into another task manager.

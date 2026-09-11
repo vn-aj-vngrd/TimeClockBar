@@ -166,9 +166,55 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         return try XCTUnwrap(TimeclockDOMDetection(result as? [String: Any]))
     }
 
+    func testClockHistoryContainsRecordedTimesInsteadOfScheduledTimes() async throws {
+        // Public time-log cards use a title div and separate start/end spans; the arrow is SVG.
+        let detection = try await detect(html: """
+        <main><span>Time Clock</span><div>You are on a break 00:32.23</div><p>Current 00:00.00</p>
+          <div class="group relative flex cursor-default">
+            <div class="truncate">Taking a break</div>
+            <span class="flex-1 truncate"><div><span class="truncate">8:09 PM</span><svg></svg><span class="truncate">Present</span></div></span>
+          </div>
+          <div class="group relative flex cursor-default">
+            <div class="truncate">Client name</div>
+            <span class="flex-1 truncate"><div><span class="truncate">2:38 PM</span><svg></svg><span class="truncate">8:09 PM</span></div></span>
+          </div>
+          <button>End Break</button>
+        </main>
+        """)
+        XCTAssertEqual(detection.history.count, 2)
+        XCTAssertEqual(detection.history.first?.start, "8:09 PM")
+        XCTAssertEqual(detection.history.last?.start, "2:38 PM")
+        let zone = TimeZone(identifier: "Asia/Manila")!
+        let now = ISO8601DateFormatter().date(from: "2026-09-11T12:42:00Z")!
+        let schedule = WorkdaySchedule(timeZone: zone, weekdays: [2,3,4,5,6], startMinutes: 900,
+            endMinutes: 0, breakMinutes: 1200, breakDuration: 60)
+        let attendance = TimeclockAttendanceHistory.resolve(detection.history, timeZone: zone,
+            shift: try XCTUnwrap(schedule.currentShift(at: now)), schedule: schedule, state: .onBreak("00:32.23"), now: now)
+        XCTAssertEqual(attendance?.clockIn, ISO8601DateFormatter().date(from: "2026-09-11T06:38:00Z"))
+        XCTAssertEqual(attendance?.breakStart, ISO8601DateFormatter().date(from: "2026-09-11T12:09:00Z"))
+        XCTAssertNil(attendance?.clockOut)
+    }
+
     func testIncidentalLoginTextDoesNotOverrideActiveControls() async throws {
         let value = try await detect(html: "<main><button>Clock Out</button><p>Current 01:02</p><footer>Last login yesterday</footer></main>")
         XCTAssertEqual(value.state, "active")
+    }
+
+    func testHistoryReadsLocalTimezonePairWithoutDuplicatingParentCards() async throws {
+        let detection = try await detect(html: """
+        <main><div class="group"><span>Time Clock</span><p>Current 00:05</p>
+          <div class="group relative flex cursor-default">
+            <div class="truncate">Client</div>
+            <span class="flex-1 truncate">
+              <div><span class="truncate">Sep 11, 2:38 PM</span><svg></svg><span class="truncate">Present</span><span>GMT+8</span></div>
+              <div><span class="truncate">Sep 11, 7:38 AM</span><svg></svg><span class="truncate">Present</span><span>GMT+1</span></div>
+            </span>
+          </div><button>Clock Out</button>
+        </div></main>
+        """)
+        XCTAssertEqual(detection.history.count, 1)
+        XCTAssertEqual(detection.history.first?.start, "Sep 11, 7:38 AM")
+        XCTAssertNotNil(detection.historyTimeZone)
     }
 
     func testHiddenLoginFormDoesNotOverrideAttendance() async throws {

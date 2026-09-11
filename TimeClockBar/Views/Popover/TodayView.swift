@@ -47,7 +47,7 @@ struct TodayView: View {
                             Text(shiftTitle(shift, upcoming: dashboard.phase == .offDay || dashboard.phase == .upcoming))
                                 .font(.headline)
                             scheduleRow("Clock in", at: shift.start, kind: .workStart, checkpoints: dashboard.checkpoints)
-                            if let date = shift.preferredBreak {
+                            if let date = dashboard.checkpoints.first(where: { $0.kind == .breakStart })?.due ?? shift.preferredBreak {
                                 scheduleRow("Break", at: date, kind: .breakStart, checkpoints: dashboard.checkpoints)
                             }
                             if let checkpoint = dashboard.checkpoints.first(where: { $0.kind == .breakOver }) {
@@ -70,7 +70,10 @@ struct TodayView: View {
                             Text("Previous shift · \(completed.workDate)").font(.caption).foregroundStyle(.secondary)
                             Label("Report filed · Clocked out", systemImage: "checkmark.circle.fill")
                                 .font(.callout).foregroundStyle(.green)
-                            if let observedAt = completed.observedAt {
+                            if let actual = completed.actualClockOut {
+                                Text("Recorded clock-out \(formatted(actual, template: "Ejm"))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            } else if let observedAt = completed.observedAt {
                                 Text("Confirmed \(formatted(observedAt, template: "Ejm"))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -102,7 +105,8 @@ struct TodayView: View {
 
     private func scheduleRow(_ title: String, at date: Date, kind: TimeclockReminderKind,
                              checkpoints: [WorkdayCheckpoint]) -> some View {
-        let complete = checkpoints.first { $0.kind == kind }?.isComplete == true
+        let checkpoint = checkpoints.first { $0.kind == kind }
+        let complete = checkpoint?.isComplete == true
         return HStack {
             Image(systemName: complete ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(complete ? .green : .secondary).frame(width: 18)
@@ -120,8 +124,11 @@ struct TodayView: View {
                 }
             }
             Spacer()
-            Text(formatted(date, template: "Ejm"))
+            Text(checkpoint.map { value in
+                value.displayedDate.map { "\(value.timingLabel) \(formatted($0, template: "Ejm"))" } ?? value.timingLabel
+            } ?? "Scheduled \(formatted(date, template: "Ejm"))")
                 .font(.caption).foregroundStyle(.secondary)
+                .help("\(kind == .breakOver ? "Return deadline" : "Scheduled time"): \(formatted(date, template: "Ejm"))")
         }
     }
 

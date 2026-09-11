@@ -57,11 +57,12 @@ struct WorkdaySchedule {
     }
 }
 
-/// A confirmed completed work date. The timestamp records observation, not a website receipt.
+/// A completed work date, keeping recorded clock-out separate from first observation.
 struct WorkdayCompletion: Equatable {
     let id: String
     let workDate: String
     let observedAt: Date?
+    var actualClockOut: Date? = nil
 }
 
 struct WorkdayCheckpoint: Identifiable, Equatable {
@@ -72,6 +73,12 @@ struct WorkdayCheckpoint: Identifiable, Equatable {
     let leadMinutes: Int
     let isComplete: Bool
     let isSilenced: Bool
+    var actualDate: Date? = nil
+
+    var displayedDate: Date? { isComplete ? actualDate : due }
+    var timingLabel: String {
+        isComplete ? (actualDate == nil ? "Time unavailable" : "Recorded") : (kind == .breakOver ? "Due" : "Scheduled")
+    }
 
     var offsets: [Int] {
         let advance = leadMinutes > 0 ? [-leadMinutes] : []

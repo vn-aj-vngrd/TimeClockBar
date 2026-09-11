@@ -6,6 +6,8 @@ struct TimeclockDOMDetection {
     let currentTimer: String
     let dayTimer: String
     let weekTimer: String
+    let history: [TimeclockHistoryEntry]
+    let historyTimeZone: TimeZone?
 
     init?(_ dictionary: [String: Any]?) {
         guard let dictionary else { return nil }
@@ -15,6 +17,12 @@ struct TimeclockDOMDetection {
         currentTimer = dictionary["currentTimer"] as? String ?? ""
         dayTimer = dictionary["dayTimer"] as? String ?? ""
         weekTimer = dictionary["weekTimer"] as? String ?? ""
+        history = (dictionary["history"] as? [[String: Any]] ?? []).compactMap { row in
+            guard let isBreak = row["isBreak"] as? Bool, let start = row["start"] as? String,
+                  let end = row["end"] as? String else { return nil }
+            return TimeclockHistoryEntry(isBreak: isBreak, start: start, end: end)
+        }
+        historyTimeZone = (dictionary["historyTimeZone"] as? String).flatMap(TimeZone.init(identifier:))
     }
 }
 
@@ -124,8 +132,23 @@ enum TimeclockDOMDetector {
       else if (clockIn) state = 'clockedOut';
       else if (login) state = 'loginRequired';
       else if (!pendingAttendance && timer && sidebar && /time clock/i.test(sidebar.innerText)) state = 'active';
+      // Read only time-log cards. Their arrows are SVG, so text alone loses range boundaries.
+      // If the website shows both a log timezone and local time, the second pair is local.
+      const rows = [...root.querySelectorAll('div.group.relative.flex.cursor-default')];
+      const history = rows.length > 64 ? [] : rows.flatMap(row => {
+        if (!visible(row)) return [];
+        const title = row.querySelector('div.truncate');
+        const range = row.querySelector('span.flex-1.truncate');
+        if (!title || !range) return [];
+        const times = [...range.querySelectorAll('span.truncate')].filter(visible).map(el => normalize(el.innerText))
+          .filter(value => /^(?:(?:[A-Za-z]{3})\s+\d{1,2},?\s+(?:\d{4},?\s+)?)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?$|^Present$/i.test(value));
+        if (times.length !== 2 && times.length !== 4) return [];
+        const [start, end] = times.slice(-2);
+        if (/^Present$/i.test(start)) return [];
+        return [{isBreak: /^(taking|took) a break$/i.test(normalize(title.innerText)), start, end}];
+      });
       return {state, timer: state === 'onBreak' ? (hasBreakNotice ? breakTimer : timer) : (currentTimer || timer),
-              currentTimer, dayTimer, weekTimer};
+              currentTimer, dayTimer, weekTimer, history, historyTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone};
     })();
     """#
 }

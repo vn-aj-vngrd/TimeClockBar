@@ -664,6 +664,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             let nextState = TimeclockDOMDetector.state(from: detection)
             let previousState = self.state
             let wasOvertime = self.overtimeMinutes > 0
+            var checkpointsChanged = false
             if nextState == .loginRequired {
                 self.isRefreshing = false
                 self.state = .loginRequired
@@ -678,6 +679,17 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
                 self.lastRefreshedAt = self.observation.observedAt
                 self.timers = nextTimers
                 self.state = nextState
+                let previousCheckpoints = self.workday.checkpoints
+                self.workday.observe(state: nextState, schedule: self.workSchedule,
+                    now: self.observation.observedAt ?? Date(), history: detection?.history ?? [],
+                    historyTimeZone: detection?.historyTimeZone)
+                checkpointsChanged = previousCheckpoints != self.workday.checkpoints
+                if checkpointsChanged {
+                    let recordedCount = self.workday.checkpoints.filter { $0.actualDate != nil }.count
+                    if recordedCount > 0 {
+                        self.monitoringLogger.info("Recorded attendance dates available: \(recordedCount, privacy: .public)")
+                    }
+                }
                 if Self.isWorking(nextState) && self.monitoringActivity == nil {
                     self.monitoringActivity = ProcessInfo.processInfo.beginActivity(
                         options: .userInitiatedAllowingIdleSystemSleep, reason: "Monitor the current Time Clock work session")
@@ -701,6 +713,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             self.updateStatusIndicator()
             self.updateMenuBarTitle()
             if Self.reminderSchedulingState(previousState) != Self.reminderSchedulingState(self.state)
+                || checkpointsChanged
                 || wasOvertime != (self.overtimeMinutes > 0)
                 || Date().timeIntervalSince(self.lastReminderReconciledAt) >= 30 {
                 self.scheduleReminders()

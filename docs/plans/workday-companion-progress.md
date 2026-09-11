@@ -211,3 +211,13 @@ Native tooltip/VoiceOver presentation has not been visually or interactively ver
 - [x] Hosted build and tests passed: [run 34598829926](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34598829926).
 
 Behavior was verified with the supplied screenshot, cached public clock-component source, local WebKit fixtures, and an in-memory notification center. No production attendance/report controls were operated and no real notification tests were sent. Native visual inspection and physical notification gates remain unverified.
+
+### Recorded attendance dates in Today — 2026-09-11
+
+- [x] Reproduce the screenshot's 14:38 clock-in and 20:09 break history with local WebKit cards; the original dashboard only had scheduled dates available.
+- [x] Extract bounded time-log timestamp pairs without client names. Resolve explicit dates and newest-first time-only ranges within the observed shift, selecting the local pair when the site shows multiple timezones. Reject inconsistent state, unreadable dates, and out-of-shift history.
+- [x] Persist actual attendance dates separately from scheduled due dates and observation time. Completed rows say Recorded; future rows say Scheduled or Due; missing recorded times say Time unavailable. Previous-shift summaries prefer recorded clock-out time.
+- [x] Use recorded break starts to correct return deadlines while retaining a precise elapsed-counter anchor within one displayed minute. Restore completed break history on startup after returning to work and suppress reminders for those completed actions.
+- [x] Full XCTest suite: **159 passed, zero failures/skips**. Result: `/tmp/TimeClockBarChecking/Logs/Test/Test-TimeClockBar-2026.09.11_20-58-28-+0800.xcresult`; log: `/tmp/timeclock-history-final-tests.log`. Cases include restart, overnight clock-out, timezones/year boundaries, multiple breaks, missing history, and duplicate container/dual-timezone extraction.
+
+No production attendance/report controls were operated. The new runtime diagnostic records only the number of available attendance dates, never their values or client names. Native visual inspection remains unverified.

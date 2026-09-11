@@ -7,6 +7,7 @@ final class WorkdayReminderController: ObservableObject {
         var seenWorking = false
         var clockedOut = false
         var clockedOutAt: Date?
+        var attendance: WorkdayAttendance?
         var hasStartedBreak: Bool?
         var breakStartedAt: Date?
         var breakReturned = false
@@ -31,7 +32,8 @@ final class WorkdayReminderController: ObservableObject {
         updateLastCompletedShift()
     }
 
-    func observe(state: TimeclockState, schedule: WorkdaySchedule, now: Date = Date()) {
+    func observe(state: TimeclockState, schedule: WorkdaySchedule, now: Date = Date(),
+                 history: [TimeclockHistoryEntry] = [], historyTimeZone: TimeZone? = nil) {
         let nextShift = schedule.currentShift(at: now)
         if shift != nextShift { shift = nextShift }
         guard let shift else { checkpoints = []; return }
@@ -58,16 +60,7 @@ final class WorkdayReminderController: ObservableObject {
                     // Repair a deadline seeded from the zero work counter. Never extend a
                     // break because a stalled/rounded counter suggests a later start.
                     if record.breakStartedAt == nil || record.breakStartedAt!.timeIntervalSince(startedAt) > tolerance {
-                        if let previous = makeCheckpoints(shift: shift, record: record, schedule: schedule,
-                                                           workLead: 15, endLead: 15).first(where: { $0.kind == .breakOver }) {
-                            // These stages were still in the future; allow rescheduling/catch-up
-                            // at the corrected deadline without replaying already-due stages.
-                            for offset in previous.offsets where previous.due.addingTimeInterval(Double(offset * 60)) > now {
-                                let stage = offset < 0 ? "advance" : "due-\(offset)"
-                                record.scheduledEvents.remove("\(previous.id)|\(stage)")
-                            }
-                        }
-                        record.breakStartedAt = startedAt
+                        correctBreakStart(startedAt, record: &record, shift: shift, schedule: schedule, now: now)
                     }
                 }
             case .clockedOut:
@@ -76,6 +69,28 @@ final class WorkdayReminderController: ObservableObject {
                     record.clockedOutAt = now
                 }
             case .loading, .stale, .loginRequired, .unknown: break
+            }
+            if record.seenWorking, let historyTimeZone,
+               let actual = TimeclockAttendanceHistory.resolve(history, timeZone: historyTimeZone,
+                    shift: shift, schedule: schedule, state: state, now: now) {
+                var saved = record.attendance ?? WorkdayAttendance()
+                if let start = actual.clockIn { saved.clockIn = start }
+                if let start = actual.breakStart {
+                    saved.breakStart = start
+                    saved.breakEnd = actual.breakEnd
+                    record.hasStartedBreak = true
+                    if actual.breakEnd != nil { record.breakReturned = true }
+                    if record.breakStartedAt == nil { record.breakStartedAt = start }
+                    if case .onBreak = state,
+                       record.breakStartedAt.map({ abs($0.timeIntervalSince(start)) > 60 }) ?? true {
+                        // Explicit recorded history can correct either direction. Keep the
+                        // more precise elapsed-counter anchor when within a displayed minute.
+                        correctBreakStart(start, record: &record, shift: shift, schedule: schedule, now: now)
+                    }
+                }
+                if state == .clockedOut { saved.clockOut = actual.clockOut ?? saved.clockOut }
+                else { saved.clockOut = nil }
+                record.attendance = saved
             }
         }
         if records[shift.id] == nil || records[shift.id] != record {
@@ -204,11 +219,19 @@ final class WorkdayReminderController: ObservableObject {
         func checkpoint(_ kind: TimeclockReminderKind, _ title: String, _ due: Date, _ lead: Int, _ complete: Bool) -> WorkdayCheckpoint {
             let suffix = kind == .breakOver ? "breakOver-\(record.breakSessionNumber ?? 0)" : kind.rawValue
             let id = "\(shift.id)|\(suffix)"
+            let actual: Date?
+            switch kind {
+            case .workStart: actual = record.attendance?.clockIn
+            case .breakStart: actual = record.attendance?.breakStart
+            case .breakOver: actual = record.attendance?.breakEnd
+            case .clockOut: actual = record.attendance?.clockOut
+            case .overtime: actual = nil
+            }
             return WorkdayCheckpoint(id: id, kind: kind, title: title, due: due, leadMinutes: lead,
-                                     isComplete: complete, isSilenced: record.silenced.contains(id))
+                                     isComplete: complete, isSilenced: record.silenced.contains(id), actualDate: actual)
         }
         var result = [checkpoint(.workStart, "Clock in", shift.start, workLead, record.seenWorking)]
-        if let date = shift.preferredBreak {
+        if let date = shift.preferredBreak ?? record.attendance?.breakStart {
             result.append(checkpoint(.breakStart, "Start break", date, 5,
                                      record.hasStartedBreak == true || record.breakStartedAt != nil || record.clockedOut))
         }
@@ -218,6 +241,19 @@ final class WorkdayReminderController: ObservableObject {
         }
         result.append(checkpoint(.clockOut, "Clock out", shift.end, endLead, record.clockedOut))
         return result
+    }
+
+    private func correctBreakStart(_ start: Date, record: inout Record, shift: WorkdaySchedule.Shift,
+                                   schedule: WorkdaySchedule, now: Date) {
+        if let previous = makeCheckpoints(shift: shift, record: record, schedule: schedule,
+                                          workLead: 15, endLead: 15).first(where: { $0.kind == .breakOver }) {
+            // Reschedule future stages without replaying already-due stages.
+            for offset in previous.offsets where previous.due.addingTimeInterval(Double(offset * 60)) > now {
+                let stage = offset < 0 ? "advance" : "due-\(offset)"
+                record.scheduledEvents.remove("\(previous.id)|\(stage)")
+            }
+        }
+        record.breakStartedAt = start
     }
 
     private func deadlineText(_ date: Date, schedule: WorkdaySchedule) -> String {
@@ -238,7 +274,8 @@ final class WorkdayReminderController: ObservableObject {
             guard record.seenWorking, record.clockedOut else { return nil }
             let parts = id.components(separatedBy: "|")
             guard parts.count == 2 else { return nil }
-            return WorkdayCompletion(id: id, workDate: parts[1], observedAt: record.clockedOutAt)
+            return WorkdayCompletion(id: id, workDate: parts[1], observedAt: record.clockedOutAt,
+                                     actualClockOut: record.attendance?.clockOut)
         }.max { $0.workDate < $1.workDate }
         if completed != lastCompletedShift { lastCompletedShift = completed }
     }
