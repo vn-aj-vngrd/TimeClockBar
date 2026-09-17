@@ -240,3 +240,12 @@ No production attendance/report controls were operated. The new runtime diagnost
 - [ ] Final native visual comparison: the Mac locked before this check. The earlier mismatch was visually/accessibility verified; the final result is established by fixture coverage and live runtime state, not a final screenshot.
 
 Changes remain local and uncommitted; no push or release publication. No live attendance/report action was performed and no notification test was sent. Existing broader platform gates remain pending.
+
+### Break fix PR and local installation — 2026-09-17
+
+- [x] Commit the fix as `25ca7eb` on `van/fix-break-status`, push it, and open [PR #2](https://github.com/vn-aj-vngrd/TimeClockBar/pull/2).
+- [x] Package and signature-verify **1.2.10, build 50**, then install and launch it from `~/Applications/Time Clock Bar.app`. Installed executable matches the built binary. Explicit version override avoids regressing to 1.2.2 while previous local versions remain untagged.
+- [x] Verify the running app through native accessibility: Today says **You're on break**, and End break is pending with the recorded 21:03 return deadline. This completes the previously blocked native status check.
+- [x] Remove the previous installed app and sixteen obsolete release/backup archives to `~/.Trash/TimeClockBar-old-versions-20260917-205436`. Keep only `dist/TimeClockBar-1.2.10-internal.zip`; preserve settings and website data.
+
+Package/build log: `/tmp/timeclock-v1210-package.log`. The PR remains open; no merge or GitHub Release publication was requested. Hosted CI was running at the installation check. No live attendance/report control was operated.
