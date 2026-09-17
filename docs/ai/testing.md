@@ -1,3 +1,5 @@
+Break-state regressions verify that a sidebar-only timer cannot establish Active, collapsed or fully transparent attendance controls cannot establish a state, and a hidden End Break cannot override visible active controls. A collapsed break-entry fixture reproduces the live offscreen animation failure, verifies Break and its separate elapsed counter, and rejects disabled or explicitly hidden fallback controls. Existing floating-panel tests cover ordinary visible Break detection.
+
 # Testing
 
 Recorded-history tests cover the supplied 14:38 clock-in / 20:09 break example, actual versus planned checkpoint dates, persisted history, correcting a previously inaccurate break deadline, recorded break return and 00:01 overnight clock-out, timezone/year boundaries, multiple breaks, and missing/unverified history. Local WebKit fixtures mirror the public card structure, including SVG arrows, nested group containers, and dual timezone pairs. No production attendance controls are used.

@@ -116,7 +116,16 @@ enum TimeclockDOMDetector {
       const visible = el => {
         if (!el || el.closest('[hidden], [aria-hidden="true"]')) return false;
         const style = getComputedStyle(el);
-        return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+        if (style.display === 'none' || style.visibility === 'hidden' || !el.getClientRects().length) return false;
+        // Animated attendance actions remain mounted while their container collapses.
+        for (let parent = el; parent; parent = parent.parentElement) {
+          const css = getComputedStyle(parent);
+          if (Number(css.opacity) === 0) return false;
+          const bounds = parent.getBoundingClientRect();
+          if ((/hidden|clip/.test(css.overflowX) && bounds.width === 0) ||
+              (/hidden|clip/.test(css.overflowY) && bounds.height === 0)) return false;
+        }
+        return true;
       };
       const timePattern = /\b\d{1,3}:\d{2}(?:(?::|\.)\d{1,2})?\b/;
       const cleanTimer = value => normalize(value).match(timePattern)?.[0] || '';
@@ -126,12 +135,19 @@ enum TimeclockDOMDetector {
       const find = pattern => controls.find(el => pattern.test(label(el)));
       const enabled = el => !el.disabled && el.getAttribute('aria-disabled') !== 'true';
       const findAttendance = pattern => controls.find(el => enabled(el) && pattern.test(label(el)));
-      const pendingAttendance = controls.some(el => !enabled(el) &&
-        /^(clock\s*(in|out)|(start|take)\s+(a\s+)?break|end break|resume|resume work|back from break)$/.test(label(el)));
       const clockIn = findAttendance(/^clock\s*in$/);
       const clockOut = findAttendance(/^clock\s*out$/);
       const startBreak = findAttendance(/^(start|take)\s+(a\s+)?break$/);
-      const endBreak = findAttendance(/^(end break|resume|resume work|back from break)$/);
+      // Offscreen WebKit can stall the site's entry animation: innerText is empty
+      // even though the enabled end-break control and break notice are mounted.
+      const clockPanel = '[data-testid="time-clock"], [data-testid="timeclock"], div.group.pointer-events-auto';
+      const breakNoticeIn = panel => [...(panel?.querySelectorAll('span') || [])]
+        .find(el => normalize(el.textContent) === 'You are on a break');
+      const animatedEndBreak = [...document.querySelectorAll('#end-break')].find(el =>
+        enabled(el) && normalize(el.textContent).toLowerCase() === 'end break' &&
+        !el.closest('[hidden], [aria-hidden="true"]') && el.getClientRects().length > 0 &&
+        getComputedStyle(el).visibility !== 'hidden' && breakNoticeIn(el.closest(clockPanel)));
+      const endBreak = findAttendance(/^(end break|resume|resume work|back from break)$/) || animatedEndBreak;
       const attendance = endBreak || clockOut || startBreak || clockIn;
       const login = find(/^(log\s*in|sign\s*in)( with .+)?$/);
       const password = [...document.querySelectorAll('input[type="password"]')].some(visible);
@@ -142,8 +158,10 @@ enum TimeclockDOMDetector {
       const text = normalize(root?.innerText);
       const metric = name => text.match(new RegExp('\\b' + name + '\\s+(\\d{1,3}:\\d{2}(?:(?::|\\.)\\d{1,2})?)', 'i'))?.[1] || '';
       const currentTimer = metric('Current'), dayTimer = metric('Day'), weekTimer = metric('Week');
-      const hasBreakNotice = /\byou are on a break\b/i.test(text);
-      const breakTimer = text.match(/\byou are on a break\s+(\d{1,3}:\d{2}(?:(?::|\.)\d{1,2})?)\b/i)?.[1] || '';
+      const notice = animatedEndBreak ? breakNoticeIn(root) : null;
+      const breakText = notice ? normalize(notice.parentElement?.parentElement?.textContent) : text;
+      const hasBreakNotice = !!notice || /\byou are on a break\b/i.test(breakText);
+      const breakTimer = breakText.match(/\byou are on a break\s*(\d{1,3}:\d{2}(?:(?::|\.)\d{1,2})?)\b/i)?.[1] || '';
       let timer = '';
       const candidates = root?.querySelectorAll('[data-testid*="timer"], [data-testid*="elapsed"], [class*="timer"], [class*="duration"], [class*="elapsed"], [id*="timer"]') || [];
       for (const el of candidates) {
@@ -162,7 +180,7 @@ enum TimeclockDOMDetector {
       else if (clockOut || startBreak) state = 'active';
       else if (clockIn) state = 'clockedOut';
       else if (login) state = 'loginRequired';
-      else if (!pendingAttendance && timer && sidebar && /time clock/i.test(sidebar.innerText)) state = 'active';
+      // A sidebar timer is also present on breaks; it cannot establish attendance state.
       // Read only time-log cards. Their arrows are SVG, so text alone loses range boundaries.
       // If the website shows both a log timezone and local time, the second pair is local.
       const rows = [...root.querySelectorAll('div.group.relative.flex.cursor-default')];

@@ -229,3 +229,14 @@ Behavior was verified with the supplied screenshot, cached public clock-componen
 - [x] Hosted build and tests passed for the installed code: [run 34603462553](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34603462553).
 
 No production attendance/report controls were operated. The new runtime diagnostic records only the number of available attendance dates, never their values or client names. Native visual inspection remains unverified.
+
+### Break reported as Active after background reload — 2026-09-17
+
+- [x] Confirm the running 1.2.9 app showed Working while its website displayed an ongoing break. Runtime diagnostics isolated offscreen WebKit leaving the break-entry animation collapsed: enabled `end-break` remained mounted but its rendered label was empty, while another attendance control or sidebar timer could report Active.
+- [x] Reproduce the collapsed-animation failure with a local WebKit fixture. Recognize the enabled, structurally scoped `end-break` control together with its exact break notice; read that notice's elapsed counter independently of animation rendering. Preserve disabled/explicitly hidden guards.
+- [x] Remove sidebar-timer-only Active inference and exclude transparent/zero-size clipped controls from ordinary classification. Add four regressions and correct the previous sidebar-only expectation.
+- [x] Final XCTest suite: **167 passed, zero failures/skips**. Result: `/tmp/TimeClockBarBreak/Logs/Test/Test-TimeClockBar-2026.09.17_20-23-47-+0800.xcresult`; log: `/tmp/timeclock-break-verified-tests.log`. Release build and signature verification passed; temporary diagnostics removed.
+- [x] Install the local modified **1.2.9, build 49** app, preserving settings/site data and the original bundle backup at `/tmp/TimeClockBar-before-break-fix-20260917.zip`. Installed executable matches the verified Release binary. Final process logged `Clock observation recovered: onBreak` at 20:24:37 while the page was offscreen, preserved Break during its next refresh at 20:25:15, and verified `onBreak` again at 20:25:19.
+- [ ] Final native visual comparison: the Mac locked before this check. The earlier mismatch was visually/accessibility verified; the final result is established by fixture coverage and live runtime state, not a final screenshot.
+
+Changes remain local and uncommitted; no push or release publication. No live attendance/report action was performed and no notification test was sent. Existing broader platform gates remain pending.
