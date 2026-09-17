@@ -232,7 +232,7 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(detection.weekTimer, "32:15")
     }
 
-    func testDetectsSidebarTimerAsActive() async throws {
+    func testSidebarTimerAloneCannotDistinguishWorkFromBreak() async throws {
         let detection = try await detect(html: """
         <aside>
             <h2>Time Clock</h2>
@@ -240,8 +240,90 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         </aside>
         """)
 
-        XCTAssertEqual(detection.state, "active")
+        XCTAssertEqual(detection.state, "unknown")
         XCTAssertEqual(detection.timer, "2:14")
+    }
+
+    func testCollapsedAttendanceActionsCannotOverrideSidebarBreakTimer() async throws {
+        // The website keeps actions mounted inside animated, clipped containers.
+        for style in ["opacity:0", "width:0;overflow:hidden", "height:0;overflow:hidden"] {
+            let detection = try await detect(html: """
+            <aside><h2>Time Clock</h2><span>00:07.45</span></aside>
+            <div style="\(style)">
+              <button style="white-space:nowrap">Clock Out</button>
+            </div>
+            """)
+            XCTAssertEqual(detection.state, "unknown", style)
+        }
+    }
+
+    func testOffscreenBreakAnimationStillProvidesBreakStateAndElapsedTime() async throws {
+        // Offscreen WebKit can leave motion containers at their initial collapsed size.
+        let detection = try await detect(html: """
+        <aside><h2>Time Clock</h2><span>00:07</span></aside>
+        <div class="group pointer-events-auto">
+          <div style="height:0;overflow:hidden;opacity:0">
+            <div><span>You are on a break</span></div>
+            <div><div>00:07.<span>45</span></div></div>
+          </div>
+          <p>Current 00:00.00</p><p>Day 05:39</p><p>Week 29:50</p>
+          <div style="width:0;overflow:hidden;opacity:0"><button id="end-break">End Break</button></div>
+          <button id="clock-out">Clock Out</button>
+        </div>
+        """)
+        XCTAssertEqual(TimeclockDOMDetector.state(from: detection), .onBreak("00:07.45"))
+        XCTAssertEqual(TimeclockMenuTitleFormatter.title(state: TimeclockDOMDetector.state(from: detection),
+            timers: TimeclockDOMDetector.timers(from: detection), components: [.status, .current],
+            remainingTitle: "", showsLabels: false), "Break · 00:07.45")
+    }
+
+    func testOffscreenReturnToWorkProvidesActiveStateAndWorkCounter() async throws {
+        let detection = try await detect(html: """
+        <div class="group pointer-events-auto">
+          <div><span>Current</span><div>00:01.<span>18</span></div></div>
+          <div><span>Day</span><div>05:40</div></div>
+          <div><span>Week</span><div>29:52</div></div>
+          <div style="width:0;overflow:hidden;opacity:0"><button id="take-break">Take Break</button></div>
+          <div style="width:0;overflow:hidden;opacity:0"><button id="clock-out">Clock Out</button></div>
+        </div>
+        """)
+        XCTAssertEqual(TimeclockDOMDetector.state(from: detection), .active("00:01.18"))
+        XCTAssertEqual(detection.dayTimer, "05:40")
+        XCTAssertEqual(detection.weekTimer, "29:52")
+    }
+
+    func testOffscreenActiveFallbackRequiresBothEnabledControlsInSamePanel() async throws {
+        for companion in ["", "<button id='clock-out' disabled>Clock Out</button>",
+                          "<button id='clock-out' hidden>Clock Out</button>"] {
+            let detection = try await detect(html: """
+            <div class="group pointer-events-auto">
+              <div style="opacity:0"><button id="take-break">Take Break</button>\(companion)</div>
+            </div>
+            <div class="group pointer-events-auto" style="opacity:0"><button id="clock-out">Clock Out</button></div>
+            """)
+            XCTAssertEqual(detection.state, "unknown")
+        }
+    }
+
+    func testAnimatedBreakFallbackRejectsDisabledOrExplicitlyHiddenControls() async throws {
+        for attributes in ["disabled", "aria-disabled='true'", "hidden", "aria-hidden='true'"] {
+            let detection = try await detect(html: """
+            <div class="group pointer-events-auto">
+              <div><div><span>You are on a break</span></div><div>00:07.45</div></div>
+              <button id="end-break" \(attributes)>End Break</button>
+            </div>
+            """)
+            XCTAssertEqual(detection.state, "unknown", attributes)
+        }
+    }
+
+    func testHiddenEndBreakDoesNotOverrideVisibleActiveControls() async throws {
+        let detection = try await detect(html: """
+        <main><p>Current 05:39</p><button>Take Break</button><button>Clock Out</button>
+          <div style="opacity:0"><button>End Break</button></div>
+        </main>
+        """)
+        XCTAssertEqual(detection.state, "active")
     }
 
     private func detect(html: String) async throws -> TimeclockDOMDetection {
