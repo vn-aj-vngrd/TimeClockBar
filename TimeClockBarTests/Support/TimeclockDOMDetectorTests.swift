@@ -277,6 +277,34 @@ final class TimeclockDOMDetectorTests: XCTestCase {
             remainingTitle: "", showsLabels: false), "Break · 00:07.45")
     }
 
+    func testOffscreenReturnToWorkProvidesActiveStateAndWorkCounter() async throws {
+        let detection = try await detect(html: """
+        <div class="group pointer-events-auto">
+          <div><span>Current</span><div>00:01.<span>18</span></div></div>
+          <div><span>Day</span><div>05:40</div></div>
+          <div><span>Week</span><div>29:52</div></div>
+          <div style="width:0;overflow:hidden;opacity:0"><button id="take-break">Take Break</button></div>
+          <div style="width:0;overflow:hidden;opacity:0"><button id="clock-out">Clock Out</button></div>
+        </div>
+        """)
+        XCTAssertEqual(TimeclockDOMDetector.state(from: detection), .active("00:01.18"))
+        XCTAssertEqual(detection.dayTimer, "05:40")
+        XCTAssertEqual(detection.weekTimer, "29:52")
+    }
+
+    func testOffscreenActiveFallbackRequiresBothEnabledControlsInSamePanel() async throws {
+        for companion in ["", "<button id='clock-out' disabled>Clock Out</button>",
+                          "<button id='clock-out' hidden>Clock Out</button>"] {
+            let detection = try await detect(html: """
+            <div class="group pointer-events-auto">
+              <div style="opacity:0"><button id="take-break">Take Break</button>\(companion)</div>
+            </div>
+            <div class="group pointer-events-auto" style="opacity:0"><button id="clock-out">Clock Out</button></div>
+            """)
+            XCTAssertEqual(detection.state, "unknown")
+        }
+    }
+
     func testAnimatedBreakFallbackRejectsDisabledOrExplicitlyHiddenControls() async throws {
         for attributes in ["disabled", "aria-disabled='true'", "hidden", "aria-hidden='true'"] {
             let detection = try await detect(html: """

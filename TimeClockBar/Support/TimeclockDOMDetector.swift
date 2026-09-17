@@ -139,16 +139,26 @@ enum TimeclockDOMDetector {
       const clockOut = findAttendance(/^clock\s*out$/);
       const startBreak = findAttendance(/^(start|take)\s+(a\s+)?break$/);
       // Offscreen WebKit can stall the site's entry animation: innerText is empty
-      // even though the enabled end-break control and break notice are mounted.
+      // even though the current attendance controls are mounted.
       const clockPanel = '[data-testid="time-clock"], [data-testid="timeclock"], div.group.pointer-events-auto';
       const breakNoticeIn = panel => [...(panel?.querySelectorAll('span') || [])]
         .find(el => normalize(el.textContent) === 'You are on a break');
-      const animatedEndBreak = [...document.querySelectorAll('#end-break')].find(el =>
-        enabled(el) && normalize(el.textContent).toLowerCase() === 'end break' &&
+      const mountedControl = (el, text) => el && enabled(el) &&
+        normalize(el.textContent).toLowerCase() === text &&
         !el.closest('[hidden], [aria-hidden="true"]') && el.getClientRects().length > 0 &&
-        getComputedStyle(el).visibility !== 'hidden' && breakNoticeIn(el.closest(clockPanel)));
+        getComputedStyle(el).visibility !== 'hidden';
+      const animatedEndBreak = [...document.querySelectorAll('#end-break')].find(el =>
+        mountedControl(el, 'end break') && breakNoticeIn(el.closest(clockPanel)));
+      // Work has two corroborating controls; neither a lone clock-out button nor
+      // a sidebar timer is enough to bypass the ordinary visibility checks.
+      const animatedWork = [...document.querySelectorAll('#take-break')].find(el => {
+        const panel = el.closest(clockPanel);
+        return panel && mountedControl(el, 'take break') &&
+          mountedControl(panel.querySelector('#clock-out'), 'clock out');
+      });
       const endBreak = findAttendance(/^(end break|resume|resume work|back from break)$/) || animatedEndBreak;
-      const attendance = endBreak || clockOut || startBreak || clockIn;
+      const activeControl = clockOut || startBreak || animatedWork;
+      const attendance = endBreak || activeControl || clockIn;
       const login = find(/^(log\s*in|sign\s*in)( with .+)?$/);
       const password = [...document.querySelectorAll('input[type="password"]')].some(visible);
       const authRoute = /\/(login|sign-in|signin)(\/|$)/i.test(location.pathname);
@@ -177,7 +187,7 @@ enum TimeclockDOMDetector {
       let state = 'unknown';
       if ((password || authRoute) && login) state = 'loginRequired';
       else if (endBreak) state = 'onBreak';
-      else if (clockOut || startBreak) state = 'active';
+      else if (activeControl) state = 'active';
       else if (clockIn) state = 'clockedOut';
       else if (login) state = 'loginRequired';
       // A sidebar timer is also present on breaks; it cannot establish attendance state.

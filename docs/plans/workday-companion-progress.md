@@ -249,3 +249,11 @@ Changes remain local and uncommitted; no push or release publication. No live at
 - [x] Remove the previous installed app and sixteen obsolete release/backup archives to `~/.Trash/TimeClockBar-old-versions-20260917-205436`. Keep only `dist/TimeClockBar-1.2.10-internal.zip`; preserve settings and website data.
 
 Package/build log: `/tmp/timeclock-v1210-package.log`. The PR remains open; no merge or GitHub Release publication was requested. Hosted CI was running at the installation check. No live attendance/report control was operated.
+
+### Return from break shows Unavailable — 2026-09-17
+
+- [x] Native inspection confirmed recorded break return at 20:58, last-known Active, and loss of verification during subsequent background refresh. The prior fallback covered only breaks.
+- [x] Reproduce Active becoming unknown when both work buttons remain collapsed offscreen. Require enabled `take-break` and `clock-out` controls in the same clock panel for the active-work fallback, sharing the existing hidden/disabled guards.
+- [x] Add positive return-to-work and negative missing/disabled/hidden/cross-panel regressions. Full XCTest suite passed: `/tmp/TimeClockBarBreak/Logs/Test/Test-TimeClockBar-2026.09.17_21-05-25-+0800.xcresult`; log `/tmp/timeclock-active-full.log`.
+
+Local reinstall and live verification follow this source increment. No live attendance or report controls were operated.

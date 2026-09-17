@@ -1,4 +1,4 @@
-Break-state regressions verify that a sidebar-only timer cannot establish Active, collapsed or fully transparent attendance controls cannot establish a state, and a hidden End Break cannot override visible active controls. A collapsed break-entry fixture reproduces the live offscreen animation failure, verifies Break and its separate elapsed counter, and rejects disabled or explicitly hidden fallback controls. Existing floating-panel tests cover ordinary visible Break detection.
+Break-state regressions verify that a sidebar-only timer cannot establish Active, collapsed or fully transparent attendance controls cannot establish a state, and a hidden End Break cannot override visible active controls. A collapsed break-entry fixture reproduces the live offscreen animation failure, verifies Break and its separate elapsed counter, and rejects disabled or explicitly hidden fallback controls. Return-to-work fixtures verify that collapsed Take Break and Clock Out controls establish Active with the work counter, while missing, disabled, hidden, or cross-panel counterparts cannot. Existing floating-panel tests cover ordinary visible Break detection.
 
 # Testing
 
