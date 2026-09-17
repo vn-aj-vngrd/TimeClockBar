@@ -257,3 +257,11 @@ Package/build log: `/tmp/timeclock-v1210-package.log`. The PR remains open; no m
 - [x] Add positive return-to-work and negative missing/disabled/hidden/cross-panel regressions. Full XCTest suite passed: `/tmp/TimeClockBarBreak/Logs/Test/Test-TimeClockBar-2026.09.17_21-05-25-+0800.xcresult`; log `/tmp/timeclock-active-full.log`.
 
 Local reinstall and live verification follow this source increment. No live attendance or report controls were operated.
+
+Return-to-work installation verification:
+
+- Full result summary: **169 passed, zero failures/skips**.
+- Pushed implementation `8185c84` to PR #2; packaged, signature-verified, and installed **1.2.11, build 52**. Installed executable matches the Release build. Build/package log: `/tmp/timeclock-v1211-package.log`.
+- Native verification at 21:07 showed **You're working** with the recorded 20:58 break return; read-only Time Clock inspection confirmed its active work counter and Take Break/Clock Out controls. At 21:08:24, after background refresh, Today still showed **You're working** with a fresh observation.
+- Moved the old 1.2.10 app and archive to `~/.Trash/TimeClockBar-old-version-20260917-210711`. Only the 1.2.11 release archive remains in `dist`; settings and website data are preserved.
+- Updated PR #2 to describe both break and active-work detection. No live attendance/report action or notification test was performed.
