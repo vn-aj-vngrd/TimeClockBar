@@ -175,7 +175,9 @@ struct SettingsPopover: View {
         private var notificationTestSection: some View {
             PreferenceSection("Notification Tests") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(controller.isPreview ? "Automatic reminders are paused in preview." : delivery.status).font(.caption).foregroundStyle(.secondary)
+                    Text(controller.isPreview ? "Automatic reminders are paused in preview."
+                         : TimeclockController.debugBuildPausesReminders ? "Automatic reminders are paused in Debug builds. Relaunch with --live-reminders to enable them."
+                         : delivery.status).font(.caption).foregroundStyle(.secondary)
                     if let date = delivery.nextReminderAt {
                         Text("Next queued reminder: \(date, format: .dateTime.weekday().hour().minute())")
                             .font(.caption).foregroundStyle(.secondary)

@@ -63,6 +63,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         return true
     }
 
+    /// macOS gives each build of this ad-hoc-signed app its own notification queue, and a later
+    /// build or update cannot see or cancel it. Clear it before quitting so its reminders cannot
+    /// keep ringing after you clock in.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !controller.isPreview else { return .terminateNow }
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        // A round trip on the same connection confirms the removals reached macOS.
+        center.getPendingNotificationRequests { _ in DispatchQueue.main.async(execute: reply) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: reply)
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         controller.stopPolling()
         tooltipTimer?.invalidate()

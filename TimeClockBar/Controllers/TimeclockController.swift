@@ -12,6 +12,16 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     let dailyReportURL = URL(string: "https://fullscale.rocks/daily-report")!
     private static let isTestProcess = ProcessInfo.processInfo.environment["TIMECLOCKBAR_PREVIEW"] == "1" || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil
     let isPreview = ProcessInfo.processInfo.arguments.contains("--preview-today") || isTestProcess
+    /// Each app copy gets its own macOS notification queue that no other copy can cancel, so a
+    /// Debug build's reminders keep firing after it quits, even once the installed app sees you clocked in.
+    static let debugBuildPausesReminders: Bool = {
+        #if DEBUG
+        return !ProcessInfo.processInfo.arguments.contains("--live-reminders")
+        #else
+        return false
+        #endif
+    }()
+    var automaticRemindersPaused: Bool { isPreview || Self.debugBuildPausesReminders }
 
     var canSendTestNotifications: Bool {
         guard !Self.isTestProcess else { return false }
@@ -880,7 +890,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
             return
         }
 
-        guard !hasSentLoginNotification, Date() >= nextLoginAttempt else { return }
+        guard !automaticRemindersPaused, !hasSentLoginNotification, Date() >= nextLoginAttempt else { return }
         nextLoginAttempt = Date().addingTimeInterval(60)
         hasSentLoginNotification = true
         TimeclockReminderScheduler.sendNotification(
@@ -899,7 +909,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     }
 
     private func handleOvertimeNotification(for state: TimeclockState) {
-        guard !isPreview, !UserDefaults.standard.bool(forKey: overtimeSilenceKey) else { return }
+        guard !automaticRemindersPaused, !UserDefaults.standard.bool(forKey: overtimeSilenceKey) else { return }
         guard overtimeReminderEnabled, overtimeMinutes > 0, Self.isWorking(state) else {
             return
         }
@@ -965,6 +975,11 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     func scheduleReminders() {
         guard !isPreview else { return }
+        if Self.debugBuildPausesReminders {
+            // Clear anything this copy queued earlier; its queue is invisible to the installed app.
+            TimeclockReminderScheduler.delivery.reconcile(plans: [])
+            return
+        }
         lastReminderReconciledAt = Date()
         TimeclockReminderScheduler.schedule(
             state: state,
