@@ -87,7 +87,7 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     private var lastPageLoad = Date.distantPast
     private var navigationStartedAt: Date?
     private var pageRecovery = TimeclockPageRecovery()
-    private let monitoringLogger = Logger(subsystem: "com.vanajvanguardia.TimeClockBar", category: "ClockMonitoring")
+    private let monitoringLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.vanajvanguardia.TimeClockBarApp", category: "ClockMonitoring")
     private var bridge: TimeclockScriptBridge?
     @Published private(set) var connectionStatus = "Checking Time Clock…"
     private var overtimeRequestInFlight = false

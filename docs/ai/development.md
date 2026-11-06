@@ -29,7 +29,7 @@ xcodebuild -project TimeClockBar.xcodeproj -scheme TimeClockBar -configuration D
 - Check `Views/Popover/PopoverView.swift` first for page switching and popover chrome.
 - Check `Views/Popover/SettingsPopover.swift` first for settings UI and preference bindings.
 - Prefer focused fixes in the owner above before adding new types.
-- macOS keeps a separate notification queue per app copy (path), and no copy can cancel another's. Debug builds therefore queue no automatic reminders and clear their own queue on launch; pass `--live-reminders` (e.g. `make run APP_ARGS=--live-reminders`) to test real reminder scheduling, and relaunch without it afterwards to clear what it queued.
+- macOS keeps a separate notification queue per build of the ad-hoc-signed app (even at the same path), and no build can cancel another's. Debug builds therefore queue no automatic reminders and clear their own queue on launch; pass `--live-reminders` (e.g. `make run APP_ARGS=--live-reminders`) to test real reminder scheduling, and relaunch without it afterwards to clear what it queued.
 
 ## Dependencies
 

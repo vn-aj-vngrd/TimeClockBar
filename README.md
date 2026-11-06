@@ -46,6 +46,14 @@ make install-local
 
 That builds the Release app on the developer's Mac, copies it to `~/Applications`, and opens it. This avoids Developer ID key sharing because each developer gets a local Xcode-signed app. It does not make a shared zip warning-free on other Macs.
 
+### Upgrading from 1.2.3 or earlier
+
+Version 1.2.4 has a new app ID, `com.vanajvanguardia.TimeClockBarApp`, because older builds left reminders that no later build can cancel. When upgrading:
+
+1. In System Settings → Notifications → Time Clock Bar, turn off Allow notifications. This entry belongs to the old app and silences every leftover reminder.
+2. Quit and delete the old app, then install and open the new one. Allow notifications for the new Time Clock Bar entry.
+3. Sign in to Time Clock again and re-enter your schedule, timezone and sounds in Settings. Old settings stay with the old app ID.
+
 ## Package The App
 
 Build a Release app and zip it for internal sharing:
