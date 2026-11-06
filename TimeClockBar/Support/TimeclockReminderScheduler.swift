@@ -296,7 +296,7 @@ enum TimeclockReminderScheduler {
                 let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
                 completion?(allowed)
             } catch {
-                Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.vanajvanguardia.TimeClockBar", category: "Notifications")
+                Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.vanajvanguardia.TimeClockBarApp", category: "Notifications")
                     .error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
                 completion?(false)
             }

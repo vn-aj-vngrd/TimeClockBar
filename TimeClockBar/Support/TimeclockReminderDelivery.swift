@@ -61,7 +61,7 @@ final class TimeclockReminderDelivery: ObservableObject {
     private var eligibleSnoozeOwners: Set<String> = []
     private var pendingOperation: Task<Void, Never>?
     private let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "com.vanajvanguardia.TimeClockBar",
+        subsystem: Bundle.main.bundleIdentifier ?? "com.vanajvanguardia.TimeClockBarApp",
         category: "ReminderDelivery"
     )
 

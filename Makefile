@@ -1,7 +1,7 @@
 PROJECT := TimeClockBar.xcodeproj
 SCHEME := TimeClockBar
 DESTINATION := platform=macOS
-BUNDLE_ID := com.vanajvanguardia.TimeClockBar
+BUNDLE_ID := com.vanajvanguardia.TimeClockBarApp
 DERIVED_DATA := build/TimeClockBarPackage
 DEBUG_DERIVED_DATA := build/TimeClockBarDebug
 APP_NAME := Time Clock Bar.app
