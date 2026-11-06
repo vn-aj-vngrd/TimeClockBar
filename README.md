@@ -6,7 +6,7 @@ Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Cloc
 
 - Menu-bar status for loading, login required, clocked out, active, on break, stale, overtime, and over-break states.
 - Optional menu-bar details for status, current timer, day timer, week timer, remaining time, labels, and the FS logo.
-- Three visible pages: Today dashboard, Time Clock, and Report on Full Scale.
+- Two visible pages: Today dashboard and Rocks (Full Scale Rocks, where clocking and Daily Report now live).
 - Left-click menu-bar access and right-click menu actions for settings, About, Time Clock, Daily Report, browser links, refresh, and quit.
 - Refresh, open-current-page, page switching, and fixed keyboard shortcuts inside the popover.
 - Custom global shortcut to toggle the app, enabled by default.
@@ -28,7 +28,7 @@ Time Clock Bar is an open-source macOS menu-bar app for the Full Scale Time Cloc
 
 - macOS 26.0 or newer.
 - Network access to:
-  - `https://timeclock.fullscale.rocks/overview`
+  - `https://fullscale.rocks/`
   - `https://fullscale.rocks/daily-report`
 - Xcode for building, testing, or packaging from source.
 

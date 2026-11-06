@@ -319,7 +319,6 @@ final class WorkdayCompanionTests: XCTestCase {
         controller.reload()
         controller.startPolling()
         XCTAssertNil(controller.webView.url)
-        XCTAssertNil(controller.dailyReportWebView.url)
         XCTAssertFalse(controller.isPolling)
     }
 
