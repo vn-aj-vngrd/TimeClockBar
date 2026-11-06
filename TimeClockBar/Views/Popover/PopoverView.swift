@@ -202,8 +202,7 @@ struct PopoverView: View {
     private var pageNavigation: some View {
         Picker("Page", selection: Binding(get: { page }, set: { show(page: $0) })) {
             Text("Today").tag(PopoverPage.today)
-            Text("Time Clock").tag(PopoverPage.timeclock)
-            Text("Report").tag(PopoverPage.dailyReport)
+            Text("Rocks").tag(PopoverPage.timeclock)
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -211,7 +210,7 @@ struct PopoverView: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
         .background(ChromeColor.headerBackground)
-        .help("Today ⌘0 · Time Clock ⌘1 · Report ⌘2")
+        .help("Today ⌘0 · Rocks ⌘1 · Report ⌘2")
     }
 
     private var content: some View {
@@ -226,11 +225,10 @@ struct PopoverView: View {
                 TodayView(controller: controller, workday: controller.workday,
                           openClock: showTimeclock, openReport: showDailyReport)
             } else if controller.isPreview {
-                ContentUnavailableView(page == .timeclock ? "Time Clock" : "Report", systemImage: page == .timeclock ? "clock" : "doc.text",
+                ContentUnavailableView("Rocks", systemImage: "clock",
                                        description: Text("Website access is paused for this local preview."))
             } else {
-                WebView(webView: currentWebView)
-                    .id(page)
+                WebView(webView: controller.webView)
             }
         }
         .id(page)
@@ -245,36 +243,16 @@ struct PopoverView: View {
             : .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
     }
 
-    private var currentWebView: WKWebView {
-        switch page {
-        case .timeclock:
-            return controller.webView
-        case .dailyReport:
-            return controller.dailyReportWebView
-        case .settings, .today:
-            return controller.webView
-        }
-    }
-
     private var currentURL: URL {
-        switch page {
-        case .timeclock:
-            return controller.url
-        case .dailyReport:
-            return controller.dailyReportURL
-        case .settings, .today:
-            return controller.url
-        }
+        page == .timeclock ? controller.webView.url ?? controller.url : controller.url
     }
 
     private func refresh() {
-        switch page {
-        case .timeclock, .today:
+        guard page != .settings else { return }
+        if page == .timeclock, controller.webView.url?.path.hasPrefix("/my-employment/daily-report") == true {
+            controller.webView.reload()
+        } else {
             controller.reload()
-        case .dailyReport:
-            controller.reloadDailyReport()
-        case .settings:
-            break
         }
     }
 
@@ -326,7 +304,7 @@ struct PopoverView: View {
 
     private func showDailyReport() {
         controller.loadDailyReport()
-        page = .dailyReport
+        page = .timeclock
         controller.isSettingsPresented = false
     }
 

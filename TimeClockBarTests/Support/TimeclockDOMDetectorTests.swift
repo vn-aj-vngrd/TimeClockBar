@@ -28,6 +28,38 @@ final class TimeclockDOMDetectorTests: XCTestCase {
         XCTAssertEqual(invalid.weekTimer, "")
     }
 
+    func testRocksClockWidgetModesMapToStateTimersAndHistory() async throws {
+        let cases: [(mode: String, status: String, sub: String, timer: String, state: String, day: String, history: String?)] = [
+            ("pre", "Not clocked in yet today", "No time logged yet", "00:00:00", "clockedOut", "00:00:00", nil),
+            ("in", "Clocked in since 9:02 AM", "No breaks yet", "01:23:45", "active", "01:23:45", "9:02 AM"),
+            ("break", "On break since 12:10 PM", "Worked today 3h 05m", "00:07:12", "onBreak", "3:05", "12:10 PM"),
+            ("done", "Clocked out at 6:00 PM", "Break today 1h 00m", "08:00:00", "clockedOut", "08:00:00", nil)
+        ]
+        for item in cases {
+            let webView = WKWebView()
+            let delegate = NavigationWaiter()
+            webView.navigationDelegate = delegate
+            try await delegate.load(html: """
+            <div class="clock-widget__group clock-widget__group--\(item.mode)">
+              <a class="clock-widget__toggle" title="x"><span class="clock-widget__pill-timer"><span class="clock-widget__glyphs">
+                \(item.timer.map { "<span>\($0)</span>" }.joined())</span></span></a>
+              <div class="clock-widget__card" style="display:none"><div class="clock-widget__head-sub">\(item.sub)</div>
+                <span class="clock-widget__status-line">\(item.status)</span>
+                <button onclick="window.actions++">Clock In</button></div>
+            </div><script>window.actions=0;</script>
+            """, in: webView)
+            let result = try await webView.evaluateJavaScript(TimeclockDOMDetector.readScript(revealClockPanel: true))
+            let detection = try XCTUnwrap(TimeclockDOMDetection(result as? [String: Any]))
+            XCTAssertEqual(detection.state, item.state, item.mode)
+            XCTAssertEqual(detection.timer, item.timer, item.mode)
+            XCTAssertEqual(detection.dayTimer, item.day, item.mode)
+            XCTAssertEqual(detection.history.first?.start, item.history, item.mode)
+            XCTAssertEqual(detection.history.first?.isBreak, item.history.map { _ in item.mode == "break" }, item.mode)
+            let actions = try await webView.evaluateJavaScript("window.actions")
+            XCTAssertEqual(actions as? Int, 0)
+        }
+    }
+
     func testHiddenReadOpensOnlyClockDetailsAndDoesNotToggleAnOpenPanel() async throws {
         let webView = WKWebView()
         let delegate = NavigationWaiter()

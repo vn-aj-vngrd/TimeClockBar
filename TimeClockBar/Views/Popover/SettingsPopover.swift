@@ -259,11 +259,11 @@ struct SettingsPopover: View {
                 PreferenceToggleRow("Global shortcut", isOn: hotkeyEnabledBinding)
                 hotkeyRow
                 ShortcutRow("Settings", shortcut: "⌘,")
-                ShortcutRow("Time Clock", shortcut: "⌘1")
+                ShortcutRow("Rocks", shortcut: "⌘1")
                 ShortcutRow("Report", shortcut: "⌘2")
                 ShortcutRow("Refresh", shortcut: "⌘R")
                 ShortcutRow("Open Current Page", shortcut: "⌘O")
-                ShortcutRow("Open Time Clock in Browser", shortcut: "⌥⌘1")
+                ShortcutRow("Open Rocks in Browser", shortcut: "⌥⌘1")
                 ShortcutRow("Open Report in Browser", shortcut: "⌥⌘2")
                 ShortcutRow("Quit App", shortcut: "⌘Q")
                     .lastPreferenceRow()

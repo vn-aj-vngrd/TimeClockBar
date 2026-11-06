@@ -35,6 +35,8 @@ enum TimeclockDOMDetector {
     // after a background reload; never activate an attendance or report action.
     private static let openClockPanelScript = #"""
     (() => {
+      // The Rocks header widget keeps its card in the DOM while closed; it never needs opening.
+      if (document.querySelector('.clock-widget__group')) return;
       if (window.__timeclockLastInput || document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
       const visible = el => el && !el.closest('[hidden], [aria-hidden="true"]') &&
         getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length > 0;
@@ -97,6 +99,7 @@ enum TimeclockDOMDetector {
       new MutationObserver(records => {
         if (records.some(r => {
           const el = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+          if (el?.closest('.clock-widget__glyphs')) return false;
           return el?.closest(controls) || [...r.addedNodes, ...r.removedNodes].some(n =>
             n.nodeType === 1 && (n.matches(controls) || n.querySelector(controls)));
         })) notify();
@@ -111,6 +114,35 @@ enum TimeclockDOMDetector {
 
     static let detectionScript = #"""
     (() => {
+      // Full Scale Rocks header clock widget (fullscale.rocks). Its mode class is the
+      // source of truth: pre/done = clocked out, in = working, break, stuck = open shift.
+      const widget = document.querySelector('.clock-widget__group');
+      if (widget) {
+        const norm = value => (value || '').replace(/\s+/g, ' ').trim();
+        const mode = widget.className.match(/clock-widget__group--(\w+)/)?.[1] || '';
+        const pill = (widget.querySelector('.clock-widget__pill-timer .clock-widget__glyphs')?.textContent || '')
+          .replace(/\s+/g, '');
+        const timer = /^\d{1,3}:\d{2}:\d{2}$/.test(pill) ? pill : '';
+        const status = norm(widget.querySelector('.clock-widget__status-line')?.textContent);
+        const sub = norm(widget.querySelector('.clock-widget__head-sub')?.textContent);
+        const hm = value => {
+          const m = value.match(/(?:(\d+)h\s*)?(\d+)m\b/);
+          return m ? `${Number(m[1] || 0)}:${m[2].padStart(2, '0')}` : '';
+        };
+        const since = status.match(/since\s+(\d{1,2}:\d{2}\s*[AP]M)$/i)?.[1] || '';
+        // Without a timer the widget is unlinked or unavailable ("TimeClock" placeholder).
+        const state = !timer ? 'unknown' : mode === 'in' || mode === 'stuck' ? 'active'
+          : mode === 'break' ? 'onBreak' : mode === 'pre' || mode === 'done' ? 'clockedOut' : 'unknown';
+        let currentTimer = '', dayTimer = '', history = [];
+        if (state === 'active') { currentTimer = timer; dayTimer = mode === 'in' ? timer : ''; }
+        else if (state === 'onBreak') dayTimer = hm(sub.match(/worked today\s+(.+)$/i)?.[1] || '');
+        else if (state === 'clockedOut') dayTimer = timer;
+        // "since" is when the current segment began, so it is the clock-in only before any break.
+        if (since && mode === 'in' && /^no breaks yet$/i.test(sub)) history = [{isBreak: false, start: since, end: 'Present'}];
+        if (since && mode === 'break') history = [{isBreak: true, start: since, end: 'Present'}];
+        return {state, timer, currentTimer, dayTimer, weekTimer: '', history,
+                historyTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone};
+      }
       const normalize = value => (value || '').replace(/\s+/g, ' ').trim()
         .replace(/(\d{1,3}:\d{2}\.)\s+(\d{1,2})\b/g, '$1$2');
       const visible = el => {

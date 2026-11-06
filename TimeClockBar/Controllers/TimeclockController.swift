@@ -8,7 +8,7 @@ import UserNotifications
 import WebKit
 
 final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegate, AVAudioPlayerDelegate {
-    let url = URL(string: "https://timeclock.fullscale.rocks/overview")!
+    let url = URL(string: "https://fullscale.rocks/")!
     let dailyReportURL = URL(string: "https://fullscale.rocks/daily-report")!
     private static let isTestProcess = ProcessInfo.processInfo.environment["TIMECLOCKBAR_PREVIEW"] == "1" || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil
     let isPreview = ProcessInfo.processInfo.arguments.contains("--preview-today") || isTestProcess
@@ -27,7 +27,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
     @Published private(set) var longOverdueSounds = UserDefaults.standard.bool(forKey: "longOverdueSounds")
     private var lastReminderReconciledAt = Date.distantPast
     let webView: WKWebView
-    let dailyReportWebView: WKWebView
 
     @Published private(set) var state: TimeclockState = .loading
     @Published private(set) var isRefreshing = false
@@ -130,7 +129,6 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
 
     override init() {
         webView = WKWebView(frame: .zero, configuration: Self.makeConfiguration())
-        dailyReportWebView = WKWebView(frame: .zero, configuration: Self.makeConfiguration())
 
         displayComponents = Self.savedDisplayComponents()
         displayLabelsEnabled = Self.savedBool(Self.displayLabelsEnabledDefaultsKey, defaultValue: false)
@@ -185,25 +183,19 @@ final class TimeclockController: NSObject, ObservableObject, WKNavigationDelegat
         beginPageRefresh()
         pageRecovery.navigationStarted()
 
-        // Always a GET to the overview; never replay the page's last attendance POST.
+        // Always a GET to the home page; never replay the page's last attendance POST.
         observation.resetMotion()
         webView.load(URLRequest(url: url))
     }
 
+    /// Report and the clock widget share one Rocks page, so Report navigates the same web view.
     func loadDailyReport() {
         guard !isPreview else { return }
-        guard dailyReportWebView.url == nil else { return }
-
-        dailyReportWebView.load(URLRequest(url: dailyReportURL))
-    }
-
-    func reloadDailyReport() {
-        guard !isPreview else { return }
-        if dailyReportWebView.url == nil {
-            loadDailyReport()
-        } else {
-            dailyReportWebView.reload()
-        }
+        guard webView.url?.path.hasPrefix("/my-employment/daily-report") != true else { return }
+        beginPageRefresh()
+        pageRecovery.navigationStarted()
+        observation.resetMotion()
+        webView.load(URLRequest(url: dailyReportURL))
     }
 
     func requestPopoverPage(_ page: PopoverPage?) {
