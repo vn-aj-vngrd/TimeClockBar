@@ -229,3 +229,39 @@ Behavior was verified with the supplied screenshot, cached public clock-componen
 - [x] Hosted build and tests passed for the installed code: [run 34603462553](https://github.com/vn-aj-vngrd/TimeClockBar/actions/runs/34603462553).
 
 No production attendance/report controls were operated. The new runtime diagnostic records only the number of available attendance dates, never their values or client names. Native visual inspection remains unverified.
+
+### Break reported as Active after background reload — 2026-09-17
+
+- [x] Confirm the running 1.2.9 app showed Working while its website displayed an ongoing break. Runtime diagnostics isolated offscreen WebKit leaving the break-entry animation collapsed: enabled `end-break` remained mounted but its rendered label was empty, while another attendance control or sidebar timer could report Active.
+- [x] Reproduce the collapsed-animation failure with a local WebKit fixture. Recognize the enabled, structurally scoped `end-break` control together with its exact break notice; read that notice's elapsed counter independently of animation rendering. Preserve disabled/explicitly hidden guards.
+- [x] Remove sidebar-timer-only Active inference and exclude transparent/zero-size clipped controls from ordinary classification. Add four regressions and correct the previous sidebar-only expectation.
+- [x] Final XCTest suite: **167 passed, zero failures/skips**. Result: `/tmp/TimeClockBarBreak/Logs/Test/Test-TimeClockBar-2026.09.17_20-23-47-+0800.xcresult`; log: `/tmp/timeclock-break-verified-tests.log`. Release build and signature verification passed; temporary diagnostics removed.
+- [x] Install the local modified **1.2.9, build 49** app, preserving settings/site data and the original bundle backup at `/tmp/TimeClockBar-before-break-fix-20260917.zip`. Installed executable matches the verified Release binary. Final process logged `Clock observation recovered: onBreak` at 20:24:37 while the page was offscreen, preserved Break during its next refresh at 20:25:15, and verified `onBreak` again at 20:25:19.
+- [ ] Final native visual comparison: the Mac locked before this check. The earlier mismatch was visually/accessibility verified; the final result is established by fixture coverage and live runtime state, not a final screenshot.
+
+Changes remain local and uncommitted; no push or release publication. No live attendance/report action was performed and no notification test was sent. Existing broader platform gates remain pending.
+
+### Break fix PR and local installation — 2026-09-17
+
+- [x] Commit the fix as `25ca7eb` on `van/fix-break-status`, push it, and open [PR #2](https://github.com/vn-aj-vngrd/TimeClockBar/pull/2).
+- [x] Package and signature-verify **1.2.10, build 50**, then install and launch it from `~/Applications/Time Clock Bar.app`. Installed executable matches the built binary. Explicit version override avoids regressing to 1.2.2 while previous local versions remain untagged.
+- [x] Verify the running app through native accessibility: Today says **You're on break**, and End break is pending with the recorded 21:03 return deadline. This completes the previously blocked native status check.
+- [x] Remove the previous installed app and sixteen obsolete release/backup archives to `~/.Trash/TimeClockBar-old-versions-20260917-205436`. Keep only `dist/TimeClockBar-1.2.10-internal.zip`; preserve settings and website data.
+
+Package/build log: `/tmp/timeclock-v1210-package.log`. The PR remains open; no merge or GitHub Release publication was requested. Hosted CI was running at the installation check. No live attendance/report control was operated.
+
+### Return from break shows Unavailable — 2026-09-17
+
+- [x] Native inspection confirmed recorded break return at 20:58, last-known Active, and loss of verification during subsequent background refresh. The prior fallback covered only breaks.
+- [x] Reproduce Active becoming unknown when both work buttons remain collapsed offscreen. Require enabled `take-break` and `clock-out` controls in the same clock panel for the active-work fallback, sharing the existing hidden/disabled guards.
+- [x] Add positive return-to-work and negative missing/disabled/hidden/cross-panel regressions. Full XCTest suite passed: `/tmp/TimeClockBarBreak/Logs/Test/Test-TimeClockBar-2026.09.17_21-05-25-+0800.xcresult`; log `/tmp/timeclock-active-full.log`.
+
+Local reinstall and live verification follow this source increment. No live attendance or report controls were operated.
+
+Return-to-work installation verification:
+
+- Full result summary: **169 passed, zero failures/skips**.
+- Pushed implementation `8185c84` to PR #2; packaged, signature-verified, and installed **1.2.11, build 52**. Installed executable matches the Release build. Build/package log: `/tmp/timeclock-v1211-package.log`.
+- Native verification at 21:07 showed **You're working** with the recorded 20:58 break return; read-only Time Clock inspection confirmed its active work counter and Take Break/Clock Out controls. At 21:08:24, after background refresh, Today still showed **You're working** with a fresh observation.
+- Moved the old 1.2.10 app and archive to `~/.Trash/TimeClockBar-old-version-20260917-210711`. Only the 1.2.11 release archive remains in `dist`; settings and website data are preserved.
+- Updated PR #2 to describe both break and active-work detection. No live attendance/report action or notification test was performed.
